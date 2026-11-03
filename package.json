@@ -1,7 +1,7 @@
 {
-  "name": "expenseflow",
+  "name": "trueledger",
   "version": "2.0.0",
-  "description": "Expense tracker that opens like a wallet",
+  "description": "TrueLedger — Personal expense tracker and financial vault that opens like a wallet",
   "scripts": { "start": "npx serve . -p 8080" },
   "license": "MIT"
 }

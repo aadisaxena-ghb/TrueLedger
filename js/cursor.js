@@ -1,4 +1,4 @@
-/* ExpenseFlow — cursor.js
+/* TrueLedger — cursor.js
    A cursor made for this page:
    - a precise dot that sits exactly on the pointer
    - a reticle that lags behind, then snaps its corner brackets around whatever you can click
@@ -13,9 +13,9 @@
   var host = document.getElementById('cursor');
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var fine = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
-  window.EF = window.EF || {};
+  window.TL = window.EF = window.TL || window.EF || {};
   if (!host || typeof host.showPopover !== 'function' || !fine || reduce) {
-    window.EF.Cursor = { restack: function () {} };
+    window.TL.Cursor = window.EF.Cursor = { restack: function () {} };
     return;
   }
 

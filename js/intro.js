@@ -1,4 +1,4 @@
-/* ExpenseFlow — intro.js
+/* TrueLedger — intro.js
    A short film about what this site does, made from the visitor's own numbers:
    1. Your money for the month sits there as one big number.
    2. Your real expenses scroll past and the number drains while the category bars fill.
@@ -11,8 +11,8 @@
 
   var root = document.documentElement;
   var el = document.getElementById('intro');
-  window.EF = window.EF || {};
-  if (!el) { window.EF.Intro = { play: function () {} }; return; }
+  window.TL = window.EF = window.TL || window.EF || {};
+  if (!el) { window.TL.Intro = window.EF.Intro = { play: function () {} }; return; }
 
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var canvas = document.getElementById('intro-canvas');
@@ -27,7 +27,7 @@
   var T_DRAIN0 = 300, T_DRAIN1 = 1900;     // the number drains
   var T_ASCII0 = 1850, T_ASCII1 = 2900;    // number -> ASCII wallet
   var T_GL0 = 2700, T_GL1 = 3500;          // glitch, ASCII -> real photo
-  var T_TITLE = 3050;                      // EXPENSEFLOW slams in
+  var T_TITLE = 3050;                      // TRUELEDGER slams in
   var T_END = 4200;                        // dissolve into the site
   var DISSOLVE = 1000;
 
@@ -83,7 +83,7 @@
   function logLines() {
     var a = D.accounts, e = D.entries;
     return [
-      { at: 60, text: 'EXPENSEFLOW // BOOT 2.0' },
+      { at: 60, text: 'TRUELEDGER // BOOT 2.0' },
       { at: 360, text: '> reading ' + a + (a === 1 ? ' account' : ' accounts') + ' ........ ok' },
       { at: 800, text: '> pulling ' + (e ? e + ' entries' : 'your entries') + ' ........ ok' },
       { at: 1250, text: '> adding up ' + D.label.toLowerCase() + ' ........ ok' },
@@ -266,7 +266,7 @@
   function drawTitle(t) {
     if (t < T_TITLE) return;
     var u = clamp((t - T_TITLE) / 240, 0, 1), e = 1 - Math.pow(1 - u, 3);
-    var txt = 'EXPENSEFLOW';
+    var txt = 'TRUELEDGER';
     if (!titleSize) {
       bctx.font = '900 100px "Big Shoulders Display", Impact, sans-serif';
       titleSize = Math.min(100 * (W * 0.9) / bctx.measureText(txt).width, H * 0.5);
@@ -452,7 +452,7 @@
     clearTimeout(safety);
     safety = setTimeout(function () { if (!ending || running) finishNow(); }, 14000);   // can never get stuck
     var fonts = (document.fonts && document.fonts.load) ? Promise.all([
-      document.fonts.load('900 100px "Big Shoulders Display"', 'EXPENSEFLOW0123456789\u20B9'),
+      document.fonts.load('900 100px "Big Shoulders Display"', 'TRUELEDGER0123456789\u20B9'),
       document.fonts.load('500 14px "DM Mono"', '0123456789\u20B9$\u20AC\u00A5\u2212')
     ]) : Promise.resolve();
     var go = function () {

@@ -1,7 +1,7 @@
 {
-  "name": "ExpenseFlow",
-  "short_name": "ExpenseFlow",
-  "description": "Expense tracker that opens like a wallet",
+  "name": "TrueLedger",
+  "short_name": "TrueLedger",
+  "description": "TrueLedger — Personal expense tracker and financial vault that opens like a wallet",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

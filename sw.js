@@ -1,6 +1,6 @@
-/* ExpenseFlow service worker: works offline after the first visit.
+/* TrueLedger service worker: works offline after the first visit.
    Bump CACHE when you ship changes so everyone gets the new files. */
-var CACHE = 'expenseflow-v8';
+var CACHE = 'trueledger-v1';
 var SHELL = [
   "./",
   "index.html",
@@ -11,6 +11,7 @@ var SHELL = [
   "js/cursor.js",
   "js/intro.js",
   "js/gate.js",
+  "js/fx.js",
   "js/app.js",
   "manifest.webmanifest",
   "assets/frames/closed.jpg",

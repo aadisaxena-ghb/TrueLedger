@@ -1,4 +1,4 @@
-/* ExpenseFlow — app.js
+/* TrueLedger — app.js
    Renders every section from the store and wires up the forms. */
 (function () {
   'use strict';
@@ -721,7 +721,7 @@
 
   function exportCsv() {
     if (!state.transactions.length) { toast('Nothing to export yet'); return; }
-    download('expenseflow-' + S.today() + '.csv', S.toCSV());
+    download('trueledger-' + S.today() + '.csv', S.toCSV());
     toast('CSV downloaded');
   }
   function toggleTheme() {
@@ -828,7 +828,7 @@
     var root = document.documentElement;
     if (animate) { root.classList.add('theme-anim'); setTimeout(function () { root.classList.remove('theme-anim'); }, 450); }
     root.setAttribute('data-theme', t);
-    try { localStorage.setItem('expenseflow.theme', t); } catch (e) {}
+    try { localStorage.setItem('trueledger.theme', t); } catch (e) {}
     var b = $('theme-btn');
     b.textContent = t === 'light' ? 'Go dark' : 'Go light';
     b.setAttribute('aria-pressed', String(t === 'light'));
@@ -928,7 +928,7 @@
     // data tools
     $('export-btn').addEventListener('click', function () {
       if (!state.transactions.length) { toast('Nothing to export yet'); return; }
-      download('expenseflow-' + S.today() + '.csv', S.toCSV());
+      download('trueledger-' + S.today() + '.csv', S.toCSV());
       toast('CSV downloaded');
     });
     $('import-btn').addEventListener('click', function () { $('import-file').click(); });

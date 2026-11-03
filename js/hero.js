@@ -1,4 +1,4 @@
-/* ExpenseFlow — hero.js
+/* TrueLedger — hero.js
    A scroll-scrubbed canvas: closed wallet -> full wallet -> empty wallet.
    Transitions are glitch slices with an RGB split instead of a cross-fade. */
 (function () {
@@ -369,6 +369,6 @@
     }
   }
 
-  window.EF = window.EF || {};
-  window.EF.Hero = { init: init, setData: setData };
+  window.TL = window.EF = window.TL || window.EF || {};
+  window.TL.Hero = window.EF.Hero = { init: init, setData: setData };
 })();

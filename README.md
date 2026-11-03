@@ -1,4 +1,4 @@
-# ExpenseFlow
+# TrueLedger
 
 A personal expense tracker that opens like a wallet. Static site, no build step, no backend.
 Your data is stored in the browser (localStorage).
@@ -27,7 +27,7 @@ Theme: dark by default. **Go light** in the top bar switches to paper-and-ink an
 
 ## Intro
 
-A ~5 second film about what the site does, made from the visitor's own numbers (`js/intro.js`): your money for the month appears as one big number, your real expenses scroll past while it drains and the category bars fill, the number turns into an ASCII wallet that glitches into the real photo, EXPENSEFLOW slams in, then the screen dissolves away in halftone dither onto the wallet gate (or straight onto the hero).
+A ~5 second film about what the site does, made from the visitor's own numbers (`js/intro.js`): your money for the month appears as one big number, your real expenses scroll past while it drains and the category bars fill, the number turns into an ASCII wallet that glitches into the real photo, TRUELEDGER slams in, then the screen dissolves away in halftone dither onto the wallet gate (or straight onto the hero).
 
 - Plays **once per browser session**, so reloads and return visits don't repeat it. Add `?intro` to the URL to force it, `?nointro` to skip it (also skips the gate, handy while developing).
 - **Skip:** the Skip intro button, or Esc / Enter / Space. A safety timer means it can never get stuck.

@@ -1,4 +1,4 @@
-/* ExpenseFlow — gate.js
+/* TrueLedger — gate.js
    The wallet gate: a first-run "create your wallet" screen and a PIN lock.
    Everything is local. The PIN is salted + hashed and kept in this browser only.
    It locks the screen; it does not encrypt your data.
@@ -8,10 +8,10 @@
 
   var root = document.documentElement;
   var gate = document.getElementById('gate');
-  window.EF = window.EF || {};
-  if (!gate) { window.EF.Gate = { lock: function () {}, hasPin: function () { return false; } }; return; }
+  window.TL = window.EF = window.TL || window.EF || {};
+  if (!gate) { window.TL.Gate = window.EF.Gate = { lock: function () {}, hasPin: function () { return false; } }; return; }
 
-  var LOCK_KEY = 'expenseflow.lock';
+  var LOCK_KEY = 'trueledger.lock';
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var finePointer = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
 
@@ -31,7 +31,7 @@
   var tiles = null, forgotTimer = 0, lockTimer = 0;
 
   /* ---------- storage + hashing ---------- */
-  function getLock() { try { return JSON.parse(localStorage.getItem(LOCK_KEY)); } catch (e) { return null; } }
+  function getLock() { try { return JSON.parse(localStorage.getItem(LOCK_KEY) || localStorage.getItem('expenseflow.lock')); } catch (e) { return null; } }
   function saveLock(rec) { try { localStorage.setItem(LOCK_KEY, JSON.stringify(rec)); } catch (e) {} }
   function randomSalt() {
     try { var a = new Uint8Array(12); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
@@ -348,7 +348,7 @@
       forgotTimer = setTimeout(function () { forgot.classList.remove('sure'); forgot.textContent = 'Forgot your passcode? Erase this wallet'; }, 5000);
       return;
     }
-    try { ['expenseflow.v2', LOCK_KEY, 'ef-onboarded'].forEach(function (k) { localStorage.removeItem(k); }); sessionStorage.clear(); } catch (e) {}
+    try { ['trueledger.v2', 'expenseflow.v2', LOCK_KEY, 'expenseflow.lock', 'tl-onboarded', 'ef-onboarded'].forEach(function (k) { localStorage.removeItem(k); }); sessionStorage.clear(); } catch (e) {}
     location.reload();
   });
 
@@ -413,7 +413,7 @@
   new MutationObserver(function () { if (settingsModal.open) refreshLockUI(); }).observe(settingsModal, { attributes: true, attributeFilter: ['open'] });
   refreshLockUI();
 
-  window.EF.Gate = { lock: lock, hasPin: function () { return !!getLock(); } };
+  window.TL.Gate = window.EF.Gate = { lock: lock, hasPin: function () { return !!getLock(); } };
 
   /* ---------- go ---------- */
   if (root.classList.contains('gate-lock')) {

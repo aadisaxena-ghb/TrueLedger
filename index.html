@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>ExpenseFlow — where did it go?</title>
+  <title>TrueLedger — where did it go?</title>
   <meta name="description" content="Track every account, every spend, and see exactly where your money went this month.">
   <meta name="theme-color" content="#0d0e10">
   <script>(function(){try{var d=document.documentElement,q=location.search,L=localStorage,S=sessionStorage;
 var no=/[?&]nointro(?:[=&]|$)/.test(q),force=/[?&]intro(?:[=&]|$)/.test(q),ng=no||/[?&]nogate(?:[=&]|$)/.test(q);
 var rm=matchMedia("(prefers-reduced-motion: reduce)").matches;
 if(!no&&!rm&&(force||S.getItem("ef-intro")!=="1"))d.classList.add("intro-lock");
-var locked=!!L.getItem("expenseflow.lock");
-if(!ng&&(locked?S.getItem("ef-unlocked")!=="1":L.getItem("ef-onboarded")!=="1"))d.classList.add("gate-lock");
+var locked=!!(L.getItem("trueledger.lock")||L.getItem("expenseflow.lock"));
+if(!ng&&(locked?S.getItem("ef-unlocked")!=="1":(L.getItem("tl-onboarded")!=="1"&&L.getItem("ef-onboarded")!=="1")))d.classList.add("gate-lock");
 setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-lock")},25000)}catch(e){}})()</script>
-  <script>try{document.documentElement.setAttribute("data-theme",localStorage.getItem("expenseflow.theme")==="light"?"light":"dark")}catch(e){document.documentElement.setAttribute("data-theme","dark")}</script>
+  <script>try{var t=localStorage.getItem("trueledger.theme")||localStorage.getItem("expenseflow.theme");document.documentElement.setAttribute("data-theme",t==="light"?"light":"dark")}catch(e){document.documentElement.setAttribute("data-theme","dark")}</script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0e10'/%3E%3Crect x='6' y='9' width='20' height='15' fill='%23e8e5df'/%3E%3Crect x='6' y='14' width='20' height='3' fill='%23e8342b'/%3E%3C/svg%3E">
@@ -24,7 +24,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 <body>
 <div id="scroll-progress"><div id="scroll-progress-fill"></div></div>
 
-<div id="intro" role="status" aria-label="Loading ExpenseFlow">
+<div id="intro" role="status" aria-label="Loading TrueLedger">
   <canvas id="intro-canvas" aria-hidden="true"></canvas>
   <div class="i-hud">
     <pre class="i-log" aria-hidden="true"></pre>
@@ -51,7 +51,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
             <div class="g-foil"></div>
             <div class="g-lines"></div>
             <div class="g-top">
-              <span class="g-brand">EXPENSEFLOW</span>
+              <span class="g-brand">TRUELEDGER</span>
               <svg class="g-lock" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
                 <g class="shackle"><path d="M10 14V10a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></g>
                 <rect x="6" y="14" width="20" height="14" rx="3" fill="currentColor"/>
@@ -76,7 +76,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
   </div>
 
   <div class="g-panel" id="g-panel" role="dialog" aria-modal="true" aria-labelledby="g-title">
-    <p class="g-eyebrow"><i class="g-led"></i>EXPENSEFLOW // WALLET GATE</p>
+    <p class="g-eyebrow"><i class="g-led"></i>TRUELEDGER // WALLET GATE</p>
     <h2 class="g-title" id="g-title" aria-label="Unlock wallet">UNLOCK WALLET</h2>
     <p class="g-sub" id="g-sub"></p>
 
@@ -111,7 +111,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 <a class="skip" href="#month">Skip to the numbers</a>
 
 <header class="bar" id="bar">
-  <a class="logo glitch-hover" href="#top" data-text="EXPENSEFLOW">EXPENSEFLOW</a>
+  <a class="logo glitch-hover" href="#top" data-text="TRUELEDGER">TRUELEDGER</a>
   <nav class="nav" aria-label="Sections">
     <a href="#month">Month</a>
     <a href="#accounts">Accounts</a>
@@ -167,7 +167,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 <!-- ============ MARQUEE BAND 1 ============ -->
 <div class="marquee-band" id="marquee-1" aria-hidden="true">
   <div class="marquee-track">
-    <span>EXPENSEFLOW</span><span>•</span>
+    <span>TRUELEDGER</span><span>•</span>
     <span>WHERE DID IT GO?</span><span>•</span>
     <span>TRACK EVERY DOLLAR</span><span>•</span>
     <span>NO SPREADSHEETS</span><span>•</span>
@@ -177,7 +177,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     <span>SECURE LOCAL VAULT</span><span>•</span>
   </div>
   <div class="marquee-track" aria-hidden="true">
-    <span>EXPENSEFLOW</span><span>•</span>
+    <span>TRUELEDGER</span><span>•</span>
     <span>WHERE DID IT GO?</span><span>•</span>
     <span>TRACK EVERY DOLLAR</span><span>•</span>
     <span>NO SPREADSHEETS</span><span>•</span>
@@ -365,7 +365,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 </main>
 
 <footer class="foot mono">
-  <span>ExpenseFlow</span>
+  <span>TrueLedger</span>
   <span>Your data stays in this browser.</span>
 </footer>
 

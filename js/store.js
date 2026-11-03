@@ -1,10 +1,10 @@
-/* ExpenseFlow — store.js
+/* TrueLedger — store.js
    State, persistence, demo data, derived numbers, CSV in/out.
    No DOM in here. */
 (function () {
   'use strict';
 
-  var KEY = 'expenseflow.v2';
+  var KEY = 'trueledger.v2';
 
   var EXPENSE_CATS = ['Food', 'Housing', 'Transport', 'Bills', 'Shopping', 'Health', 'Fun', 'Travel', 'Other'];
   var INCOME_CATS = ['Salary', 'Freelance', 'Investment', 'Gift', 'Other'];
@@ -138,7 +138,7 @@
 
   function load() {
     try {
-      var raw = localStorage.getItem(KEY);
+      var raw = localStorage.getItem(KEY) || localStorage.getItem('expenseflow.v2');
       if (raw) {
         var s = JSON.parse(raw);
         if (s && s.v === 2 && s.accounts && s.transactions) {
@@ -420,8 +420,8 @@
     return added;
   }
 
-  window.EF = window.EF || {};
-  window.EF.Store = {
+  window.TL = window.EF = window.TL || window.EF || {};
+  window.TL.Store = window.EF.Store = {
     state: state, subscribe: subscribe,
     EXPENSE_CATS: EXPENSE_CATS, INCOME_CATS: INCOME_CATS, ACCOUNT_TYPES: ACCOUNT_TYPES, CURRENCIES: CURRENCIES,
     fmt: fmt, symbol: symbol, today: today, currentYM: currentYM, shiftYM: shiftYM, monthLabel: monthLabel,

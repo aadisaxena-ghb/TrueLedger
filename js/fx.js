@@ -1,11 +1,11 @@
-/* ExpenseFlow — fx.js
+/* TrueLedger — fx.js
    Dynamic visual & audio effects: Marquee bands, drifting words, 3D card tilt & magnetic buttons,
    cyber number decode, scanline reveals, chart animations, 3D coin/confetti engine, text scrambler,
    scroll progress, Web Audio synth, and easter eggs.
 */
 (function () {
   'use strict';
-  window.EF = window.EF || {};
+  window.TL = window.EF = window.TL || window.EF || {};
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var finePointer = window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches;
   var NUM_SEL = '#s-income, #s-spent, #s-net, #s-balance, #h-balance, #h-spent, .stat .v, .acc-bal, .goal-amt';
@@ -13,7 +13,7 @@
   /* 1. Web Audio Synthesizer */
   var Sound = (function () {
     var ctx = null, enabled = false;
-    try { enabled = localStorage.getItem('expenseflow.sound') === '1'; } catch (e) { enabled = false; }
+    try { enabled = (localStorage.getItem('trueledger.sound') || localStorage.getItem('expenseflow.sound')) === '1'; } catch (e) { enabled = false; }
 
     function initCtx() {
       if (!ctx) {
@@ -64,7 +64,7 @@
 
     function setEnabled(val) {
       enabled = !!val;
-      try { localStorage.setItem('expenseflow.sound', enabled ? '1' : '0'); } catch (e) {}
+      try { localStorage.setItem('trueledger.sound', enabled ? '1' : '0'); } catch (e) {}
       if (enabled) { initCtx(); play('success'); }
       updateSoundUI();
     }
@@ -516,7 +516,7 @@
     }
   }
 
-  window.EF.FX = {
+  window.TL.FX = window.EF.FX = {
     init: init, sound: Sound.play, toggleSound: Sound.toggle, isSoundEnabled: Sound.isEnabled,
     burstCoins: BurstEngine.burstCoins, burstConfetti: BurstEngine.burstConfetti, burstJackpot: BurstEngine.burstJackpot,
     scrambleNumber: NumberDecoder.scramble,
