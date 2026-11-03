@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ExpenseFlow — where did it go?</title>
+  <meta name="description" content="Track every account, every spend, and see exactly where your money went this month.">
+  <meta name="theme-color" content="#0d0e10">
+  <script>(function(){try{var d=document.documentElement,q=location.search,L=localStorage,S=sessionStorage;
+var no=/[?&]nointro(?:[=&]|$)/.test(q),force=/[?&]intro(?:[=&]|$)/.test(q),ng=no||/[?&]nogate(?:[=&]|$)/.test(q);
+var rm=matchMedia("(prefers-reduced-motion: reduce)").matches;
+if(!no&&!rm&&(force||S.getItem("ef-intro")!=="1"))d.classList.add("intro-lock");
+var locked=!!L.getItem("expenseflow.lock");
+if(!ng&&(locked?S.getItem("ef-unlocked")!=="1":L.getItem("ef-onboarded")!=="1"))d.classList.add("gate-lock");
+setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-lock")},25000)}catch(e){}})()</script>
+  <script>try{document.documentElement.setAttribute("data-theme",localStorage.getItem("expenseflow.theme")==="light"?"light":"dark")}catch(e){document.documentElement.setAttribute("data-theme","dark")}</script>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0e10'/%3E%3Crect x='6' y='9' width='20' height='15' fill='%23e8e5df'/%3E%3Crect x='6' y='14' width='20' height='3' fill='%23e8342b'/%3E%3C/svg%3E">
+  <link rel="preload" href="assets/fonts/big-shoulders-display-latin-900-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/gate.css">
+</head>
+<body>
+<div id="scroll-progress"><div id="scroll-progress-fill"></div></div>
+
+<div id="intro" role="status" aria-label="Loading ExpenseFlow">
+  <canvas id="intro-canvas" aria-hidden="true"></canvas>
+  <div class="i-hud">
+    <pre class="i-log" aria-hidden="true"></pre>
+    <div class="i-foot" aria-hidden="true"><span class="i-count">000</span><span class="i-lab">% loaded</span></div>
+    <div class="i-line" aria-hidden="true"><span class="i-fill"></span></div>
+    <button class="i-skip" type="button" data-cursor="SKIP">Skip intro</button>
+  </div>
+</div>
+
+<section id="gate" aria-labelledby="g-title">
+  <canvas id="g-dots" aria-hidden="true"></canvas>
+  <div class="g-word" id="g-word" aria-hidden="true">WALLET</div>
+
+  <div class="g-scene" id="g-scene" aria-hidden="true">
+    <div class="g-par" data-depth="-18" style="left:8%;top:14%"><i class="g-tile gt1"></i></div>
+    <div class="g-par" data-depth="-30" style="right:6%;top:10%"><i class="g-tile gt2"></i></div>
+    <div class="g-par" data-depth="-12" style="right:14%;bottom:12%"><i class="g-tile gt3"></i></div>
+
+    <div class="g-par g-cardpar" data-depth="10">
+      <div class="g-card-wrap" id="g-card-wrap">
+        <div class="g-card" id="g-card">
+          <div class="g-thick th1"></div><div class="g-thick th2"></div><div class="g-thick th3"></div>
+          <div class="g-face">
+            <div class="g-foil"></div>
+            <div class="g-lines"></div>
+            <div class="g-top">
+              <span class="g-brand">EXPENSEFLOW</span>
+              <svg class="g-lock" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+                <g class="shackle"><path d="M10 14V10a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></g>
+                <rect x="6" y="14" width="20" height="14" rx="3" fill="currentColor"/>
+                <rect x="14.8" y="19" width="2.4" height="4.6" rx="1.2" fill="#0d0e10"/>
+              </svg>
+            </div>
+            <div class="g-chip"><i></i><i></i><i></i></div>
+            <div class="g-num" id="g-num"><span>5412</span><span>7589</span><span>9012</span><span class="g-last" id="g-last">••••</span></div>
+            <div class="g-bot">
+              <div><small>HOLDER</small><b id="g-holder">YOUR NAME</b></div>
+              <div><small>VAULT KEY</small><b>ACTIVE</b></div>
+            </div>
+            <div class="g-glare"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="g-par" data-depth="34" style="left:10%;top:62%"><div class="g-coin gc1"><span>₹</span></div></div>
+    <div class="g-par" data-depth="48" style="right:8%;top:30%"><div class="g-coin gc2"><span>$</span></div></div>
+    <div class="g-par" data-depth="22" style="left:34%;bottom:6%"><div class="g-coin gc3"><span>€</span></div></div>
+  </div>
+
+  <div class="g-panel" id="g-panel" role="dialog" aria-modal="true" aria-labelledby="g-title">
+    <p class="g-eyebrow"><i class="g-led"></i>EXPENSEFLOW // WALLET GATE</p>
+    <h2 class="g-title" id="g-title" aria-label="Unlock wallet">UNLOCK WALLET</h2>
+    <p class="g-sub" id="g-sub"></p>
+
+    <form id="g-form" novalidate autocomplete="off">
+      <label class="g-field" id="g-name-wrap">
+        <span class="g-lab">YOUR NAME</span>
+        <input id="gt-name" type="text" maxlength="28" placeholder="What should the wallet call you?" autocomplete="off" spellcheck="false">
+      </label>
+
+      <div class="g-field" id="g-pin-wrap">
+        <span class="g-lab" id="g-pin-lab">PASSCODE</span>
+        <div class="g-pin" id="g-pin">
+          <input id="g-pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-labelledby="g-pin-lab" aria-describedby="g-msg">
+          <i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <button type="button" class="g-eye" id="g-eye" aria-pressed="false">Show digits</button>
+      </div>
+
+      <p class="g-msg" id="g-msg" role="alert"></p>
+
+      <button type="submit" class="g-btn g-primary" id="g-submit" data-cursor="UNLOCK"><span id="g-submit-t">Unlock wallet</span><b aria-hidden="true">→</b></button>
+      <button type="button" class="g-btn g-ghost" id="g-demo" data-cursor="DEMO">Quick demo access</button>
+    </form>
+
+    <button type="button" class="g-forgot" id="g-forgot">Forgot your passcode? Erase this wallet</button>
+    <p class="g-fine" id="g-fine"></p>
+  </div>
+
+  <div class="g-flash" aria-hidden="true"></div>
+</section>
+
+<a class="skip" href="#month">Skip to the numbers</a>
+
+<header class="bar" id="bar">
+  <a class="logo glitch-hover" href="#top" data-text="EXPENSEFLOW">EXPENSEFLOW</a>
+  <nav class="nav" aria-label="Sections">
+    <a href="#month">Month</a>
+    <a href="#accounts">Accounts</a>
+    <a href="#goals">Goals</a>
+    <a href="#ledger">Ledger</a>
+    <a href="#insights">Insights</a>
+  </nav>
+  <div class="bar-actions">
+    <button class="text-btn jump-btn" id="jump-btn" type="button" aria-label="Open command palette">Jump (Ctrl K)</button>
+    <button class="text-btn" id="privacy-btn" type="button" aria-pressed="false">Hide numbers</button>
+    <button class="text-btn" id="sound-btn" type="button" aria-pressed="false" title="Toggle audio effects"><span class="sound-icon">🔇</span> Sound: OFF</button>
+    <button class="text-btn" id="theme-btn" type="button" aria-pressed="false">Go light</button>
+    <button class="text-btn" id="settings-btn" type="button">Settings</button>
+    <button class="add-btn" id="add-btn" type="button">+ Add entry</button>
+  </div>
+</header>
+
+<!-- ============ HERO: scroll-scrubbed wallet ============ -->
+<section class="hero" id="top" aria-label="Introduction">
+  <div class="hero-pin">
+    <div class="stage" id="stage">
+      <canvas id="wallet-canvas" aria-hidden="true"></canvas>
+      <div class="tags" id="hero-tags" aria-hidden="true"></div>
+    </div>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="scanline" aria-hidden="true"></div>
+
+    <div class="scene is-on" data-scene="0">
+      <p class="mono scene-label">Open the wallet</p>
+      <h1 class="mega" aria-label="Where did it go?">
+        <span class="kin-line glitch" data-text="WHERE DID" aria-hidden="true">WHERE DID</span>
+        <span class="kin-line glitch" data-text="IT GO?" aria-hidden="true">IT GO?</span>
+      </h1>
+    </div>
+
+    <div class="scene" data-scene="1">
+      <p class="mono scene-label">In your accounts right now</p>
+      <p class="mega num money" id="h-balance">0</p>
+      <p class="mono scene-sub" id="h-balance-sub"></p>
+    </div>
+
+    <div class="scene" data-scene="2">
+      <p class="mono scene-label" id="h-month-label">Gone this month</p>
+      <p class="mega num money red" id="h-spent">0</p>
+      <p class="mono scene-sub" id="h-spent-sub">Keep scrolling. The list is below.</p>
+    </div>
+
+    <div class="cue" id="cue" aria-hidden="true"><span class="cue-line"></span><span class="mono">Scroll</span></div>
+    <div class="rail" aria-hidden="true"><span id="rail-fill"></span></div>
+  </div>
+</section>
+
+<!-- ============ MARQUEE BAND 1 ============ -->
+<div class="marquee-band" id="marquee-1" aria-hidden="true">
+  <div class="marquee-track">
+    <span>EXPENSEFLOW</span><span>•</span>
+    <span>WHERE DID IT GO?</span><span>•</span>
+    <span>TRACK EVERY DOLLAR</span><span>•</span>
+    <span>NO SPREADSHEETS</span><span>•</span>
+    <span>ZERO COMPROMISE</span><span>•</span>
+    <span>COLD HARD TRUTH</span><span>•</span>
+    <span>REAL-TIME CASHFLOW</span><span>•</span>
+    <span>SECURE LOCAL VAULT</span><span>•</span>
+  </div>
+  <div class="marquee-track" aria-hidden="true">
+    <span>EXPENSEFLOW</span><span>•</span>
+    <span>WHERE DID IT GO?</span><span>•</span>
+    <span>TRACK EVERY DOLLAR</span><span>•</span>
+    <span>NO SPREADSHEETS</span><span>•</span>
+    <span>ZERO COMPROMISE</span><span>•</span>
+    <span>COLD HARD TRUTH</span><span>•</span>
+    <span>REAL-TIME CASHFLOW</span><span>•</span>
+    <span>SECURE LOCAL VAULT</span><span>•</span>
+  </div>
+</div>
+
+<main>
+
+  <!-- ============ THE MONTH ============ -->
+  <section class="sec" id="month" aria-labelledby="t-month">
+    <div class="drift-word" data-drift="-0.22" aria-hidden="true">MONTH</div>
+    <div class="sec-head">
+      <h2 class="title" id="t-month" data-kin>THE MONTH</h2>
+      <div class="monthnav" role="group" aria-label="Choose month">
+        <button type="button" id="month-prev" aria-label="Previous month">&larr;</button>
+        <span class="mono" id="month-label">October 2026</span>
+        <button type="button" id="month-next" aria-label="Next month">&rarr;</button>
+      </div>
+    </div>
+
+    <div class="demo-note" id="demo-note" hidden>
+      <p class="mono">This is sample data so you can see how it works.</p>
+      <button class="link-btn" id="fresh-btn" type="button">Start with my own numbers</button>
+    </div>
+
+    <div class="stats">
+      <button type="button" class="stat" data-go="income">
+        <span class="k mono">Money in</span>
+        <strong class="v num money" id="s-income">0</strong>
+        <span class="sub mono" id="s-income-sub"></span>
+      </button>
+      <button type="button" class="stat" data-go="expense">
+        <span class="k mono">Money out</span>
+        <strong class="v num money red" id="s-spent">0</strong>
+        <span class="sub mono" id="s-spent-sub"></span>
+      </button>
+      <button type="button" class="stat" data-go="insights">
+        <span class="k mono">Kept</span>
+        <strong class="v num money" id="s-net">0</strong>
+        <span class="sub mono" id="s-net-sub"></span>
+      </button>
+      <button type="button" class="stat" data-go="accounts">
+        <span class="k mono">In your accounts</span>
+        <strong class="v num money" id="s-balance">0</strong>
+        <span class="sub mono" id="s-balance-sub"></span>
+      </button>
+    </div>
+
+    <div class="budget" id="budget">
+      <div class="budget-top">
+        <h3 class="sub-title">Budget</h3>
+        <button class="link-btn" id="budget-edit" type="button">Change limit</button>
+      </div>
+      <div class="cells" id="budget-cells" role="img" aria-label="Budget used"></div>
+      <div class="budget-meta mono">
+        <span id="budget-left"></span>
+        <span id="budget-pace"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ACCOUNTS ============ -->
+  <section class="sec split" id="accounts" aria-labelledby="t-accounts">
+    <div class="drift-word" data-drift="0.25" aria-hidden="true">ACCOUNTS</div>
+    <div class="split-head">
+      <h2 class="title" id="t-accounts" data-kin>ACCOUNTS</h2>
+      <p class="mono hint">Switch an account off to leave it out of every total on this page.</p>
+      <button class="ghost-btn" id="add-account-btn" type="button">+ Add account</button>
+    </div>
+    <ul class="acc-list" id="acc-list"></ul>
+  </section>
+
+  <!-- ============ GOALS ============ -->
+  <section class="sec split" id="goals" aria-labelledby="t-goals">
+    <div class="drift-word" data-drift="-0.20" aria-hidden="true">TARGETS</div>
+    <div class="split-head">
+      <h2 class="title" id="t-goals" data-kin>GOALS</h2>
+      <p class="mono hint">Money you are setting aside for something. Top a goal up whenever you put cash away.</p>
+      <button class="ghost-btn" id="add-goal-btn" type="button">+ New goal</button>
+    </div>
+    <ul class="goal-list" id="goal-list"></ul>
+  </section>
+
+  <!-- ============ LEDGER ============ -->
+  <section class="sec" id="ledger" aria-labelledby="t-ledger">
+    <div class="drift-word" data-drift="0.22" aria-hidden="true">LEDGER</div>
+    <div class="sec-head">
+      <h2 class="title" id="t-ledger" data-kin>LEDGER</h2>
+      <div class="ledger-meta">
+        <button class="link-btn" id="repeat-btn" type="button">Repeating entries</button>
+        <span class="mono" id="ledger-count"></span>
+      </div>
+    </div>
+
+    <div class="filters">
+      <label class="field grow"><span class="mono">Search</span>
+        <input type="search" id="f-search" placeholder="Merchant, note or category" autocomplete="off">
+      </label>
+      <label class="field"><span class="mono">Type</span>
+        <select id="f-type">
+          <option value="all">All</option><option value="expense">Spending</option>
+          <option value="income">Income</option><option value="transfer">Transfers</option>
+        </select>
+      </label>
+      <label class="field"><span class="mono">Account</span><select id="f-account"></select></label>
+      <label class="field"><span class="mono">Category</span><select id="f-category"></select></label>
+      <label class="field"><span class="mono">Period</span>
+        <select id="f-period">
+          <option value="month">Selected month</option><option value="all">Everything</option>
+        </select>
+      </label>
+      <label class="field"><span class="mono">Sort</span>
+        <select id="f-sort">
+          <option value="date-desc">Newest first</option><option value="date-asc">Oldest first</option>
+          <option value="amt-desc">Largest first</option><option value="amt-asc">Smallest first</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="chips" id="f-chips"></div>
+
+    <ul class="tx-list" id="tx-list"></ul>
+    <div class="more-row"><button class="ghost-btn" id="more-btn" type="button" hidden>Show more</button></div>
+  </section>
+
+  <!-- ============ MARQUEE BAND 2 ============ -->
+  <div class="marquee-band marquee-rev" id="marquee-2" aria-hidden="true">
+    <div class="marquee-track">
+      <span>LEDGER INTELLIGENCE</span><span>•</span>
+      <span>DYNAMIC VELOCITY</span><span>•</span>
+      <span>INSTANT BREAKDOWN</span><span>•</span>
+      <span>BUDGET PULSE</span><span>•</span>
+      <span>SAVINGS ACCELERATOR</span><span>•</span>
+      <span>PRECISION TRACKING</span><span>•</span>
+    </div>
+    <div class="marquee-track" aria-hidden="true">
+      <span>LEDGER INTELLIGENCE</span><span>•</span>
+      <span>DYNAMIC VELOCITY</span><span>•</span>
+      <span>INSTANT BREAKDOWN</span><span>•</span>
+      <span>BUDGET PULSE</span><span>•</span>
+      <span>SAVINGS ACCELERATOR</span><span>•</span>
+      <span>PRECISION TRACKING</span><span>•</span>
+    </div>
+  </div>
+
+  <!-- ============ INSIGHTS ============ -->
+  <section class="sec" id="insights" aria-labelledby="t-insights">
+    <div class="drift-word" data-drift="-0.25" aria-hidden="true">INSIGHTS</div>
+    <div class="sec-head">
+      <h2 class="title" id="t-insights" data-kin>WHERE IT WENT</h2>
+    </div>
+
+    <div class="insight-grid">
+      <div class="panel">
+        <h3 class="sub-title">By category</h3>
+        <ul class="cats" id="cat-list"></ul>
+      </div>
+      <div class="panel">
+        <h3 class="sub-title">Six months</h3>
+        <div id="trend" class="trend" role="img" aria-label="Income and spending for the last six months"></div>
+        <div class="legend mono"><span><i class="sw sw-in"></i>In</span><span><i class="sw sw-out"></i>Out</span></div>
+      </div>
+      <div class="panel cal-panel">
+        <h3 class="sub-title">Day by day</h3>
+        <div class="cal" id="cal" role="img" aria-label="Spending per day"></div>
+        <p class="mono cal-note" id="cal-note"></p>
+      </div>
+    </div>
+
+    <ul class="notes" id="notes"></ul>
+  </section>
+
+  <!-- ============ END ============ -->
+  <section class="end" id="end" aria-live="polite">
+    <div class="drift-word" data-drift="0.18" aria-hidden="true">ANSWER</div>
+    <p class="mono end-label" id="end-label"></p>
+    <h2 class="end-title" id="end-title"></h2>
+    <p class="end-sub mono" id="end-sub"></p>
+    <button class="end-btn" id="end-add" type="button">+ Add an entry</button>
+  </section>
+</main>
+
+<footer class="foot mono">
+  <span>ExpenseFlow</span>
+  <span>Your data stays in this browser.</span>
+</footer>
+
+<button class="fab" id="fab" type="button" aria-label="Add entry">+</button>
+
+<!-- ============ DIALOGS ============ -->
+<dialog class="modal" id="entry-modal" aria-labelledby="entry-title">
+  <form id="entry-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="entry-title">Add entry</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+
+    <div class="seg" role="radiogroup" aria-label="Entry type" id="seg-type">
+      <button type="button" role="radio" data-type="expense" aria-checked="true" class="on">Spent</button>
+      <button type="button" role="radio" data-type="income" aria-checked="false">Received</button>
+      <button type="button" role="radio" data-type="transfer" aria-checked="false">Moved</button>
+    </div>
+
+    <label class="amount-field">
+      <span class="mono">Amount</span>
+      <span class="amount-wrap"><b id="amt-sym">$</b><input id="e-amount" inputmode="decimal" placeholder="0.00" autocomplete="off" required></span>
+    </label>
+
+    <label class="field"><span class="mono">What was it?</span>
+      <input id="e-desc" type="text" placeholder="Groceries, rent, salary..." autocomplete="off" required>
+    </label>
+
+    <div class="row2">
+      <label class="field"><span class="mono" id="e-acc-label">From account</span><select id="e-account"></select></label>
+      <label class="field" id="e-to-wrap" hidden><span class="mono">To account</span><select id="e-to"></select></label>
+      <label class="field" id="e-cat-wrap"><span class="mono">Category</span><select id="e-category"></select></label>
+    </div>
+
+    <div class="row2">
+      <label class="field"><span class="mono">Date</span><input id="e-date" type="date" required></label>
+      <label class="field"><span class="mono">Note (optional)</span><input id="e-note" type="text" autocomplete="off"></label>
+    </div>
+
+    <label class="check" id="e-repeat-wrap">
+      <input type="checkbox" id="e-repeat"><span>Repeat every month on this day</span>
+    </label>
+
+    <p class="form-error mono" id="entry-error" role="alert" hidden></p>
+
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="solid-btn" id="entry-save">Save entry</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal" id="account-modal" aria-labelledby="account-title">
+  <form id="account-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="account-title">Add account</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <label class="field"><span class="mono">Name</span><input id="a-name" type="text" placeholder="Everyday bank, Cash, Credit card" required autocomplete="off"></label>
+    <div class="row2">
+      <label class="field"><span class="mono">Type</span><select id="a-type"></select></label>
+      <label class="field"><span class="mono">Balance today</span><input id="a-balance" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
+    </div>
+    <p class="form-error mono" id="account-error" role="alert" hidden></p>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="solid-btn">Add account</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal" id="settings-modal" aria-labelledby="settings-title">
+  <form id="settings-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="settings-title">Settings</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <label class="field"><span class="mono">Your name</span><input id="p-name" type="text" autocomplete="given-name"></label>
+    <div class="row2">
+      <label class="field"><span class="mono">Currency</span><select id="p-currency"></select></label>
+      <label class="field"><span class="mono">Monthly budget</span><input id="p-budget" inputmode="decimal" placeholder="0" autocomplete="off"></label>
+    </div>
+    <p class="field-hint mono">Changing the currency swaps the symbol only. Amounts are not converted.</p>
+
+    <div class="data-tools" id="lock-tools">
+      <p class="mono">App lock</p>
+      <p class="mono field-hint" id="lock-status"></p>
+      <div class="tool-row">
+        <button type="button" class="ghost-btn" id="lock-set">Set PIN</button>
+        <button type="button" class="ghost-btn" id="lock-now">Lock now</button>
+        <button type="button" class="ghost-btn danger" id="lock-remove">Remove PIN</button>
+      </div>
+    </div>
+
+    <div class="data-tools">
+      <p class="mono">Your data</p>
+      <div class="tool-row">
+        <button type="button" class="ghost-btn" id="export-btn">Export CSV</button>
+        <button type="button" class="ghost-btn" id="import-btn">Import CSV</button>
+        <input type="file" id="import-file" accept=".csv,text/csv" hidden>
+      </div>
+      <div class="tool-row">
+        <button type="button" class="ghost-btn" id="demo-btn">Load sample data</button>
+        <button type="button" class="ghost-btn danger" id="wipe-btn">Erase everything</button>
+      </div>
+    </div>
+
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Close</button>
+      <button type="submit" class="solid-btn">Save settings</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal" id="goal-modal" aria-labelledby="goal-title">
+  <form id="goal-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="goal-title">New goal</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <label class="field"><span class="mono">What are you saving for?</span><input id="g-name" type="text" placeholder="Laptop, trip, emergency fund" required autocomplete="off"></label>
+    <div class="row2">
+      <label class="field"><span class="mono">Target</span><input id="g-target" inputmode="decimal" placeholder="0" autocomplete="off"></label>
+      <label class="field"><span class="mono">Already saved</span><input id="g-saved" inputmode="decimal" placeholder="0" autocomplete="off"></label>
+    </div>
+    <p class="form-error mono" id="goal-error" role="alert" hidden></p>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="solid-btn">Create goal</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal small" id="contrib-modal" aria-labelledby="contrib-title">
+  <form id="contrib-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="contrib-title">Add to goal</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <label class="field"><span class="mono">Amount</span><input id="c-amount" inputmode="decimal" placeholder="0" autocomplete="off"></label>
+    <p class="form-error mono" id="contrib-error" role="alert" hidden></p>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" id="c-take">Take out</button>
+      <button type="submit" class="solid-btn">Add</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal" id="repeat-modal" aria-labelledby="repeat-title">
+  <div class="modal-inner">
+    <header class="modal-head">
+      <h3 id="repeat-title">Repeating entries</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <p class="mono repeat-hint">These are added for you each month on their day. Stopping one keeps everything already logged.</p>
+    <ul class="repeat-list" id="repeat-list"></ul>
+    <footer class="modal-foot"><button type="button" class="ghost-btn" data-close>Close</button></footer>
+  </div>
+</dialog>
+
+<dialog class="modal small" id="pin-modal" aria-labelledby="pin-title">
+  <form id="pin-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="pin-title">Set PIN</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <label class="field" id="pm-cur-wrap"><span class="mono">Current PIN</span><input id="pm-cur" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>
+    <label class="field" id="pm-new-wrap"><span class="mono">New PIN (4 to 6 digits)</span><input id="pm-new" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>
+    <label class="field" id="pm-rep-wrap"><span class="mono">Repeat new PIN</span><input id="pm-rep" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>
+    <p class="form-error mono" id="pm-error" role="alert" hidden></p>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="solid-btn" id="pm-save">Save PIN</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal small" id="confirm-modal" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <header class="modal-head"><h3 id="confirm-title">Are you sure?</h3></header>
+    <p class="confirm-text" id="confirm-text"></p>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Keep it</button>
+      <button type="submit" class="solid-btn danger" id="confirm-yes" value="yes">Delete</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal palette" id="palette" aria-label="Jump to a section or run a command">
+  <div class="pal-box">
+    <input id="pal-input" type="text" placeholder="Type a command, a section, or words to search the ledger" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list">
+    <ul id="pal-list" role="listbox" aria-label="Results"></ul>
+    <p class="mono pal-hint">Up and down to move. Enter to run. Esc to close.</p>
+  </div>
+</dialog>
+
+<div id="cursor" popover="manual" aria-hidden="true"></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-msg"></span><button type="button" class="toast-act" id="toast-act" hidden></button></div>
+
+<script src="js/store.js"></script>
+<script src="js/hero.js"></script>
+<script src="js/cursor.js"></script>
+<script src="js/intro.js"></script>
+<script src="js/gate.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

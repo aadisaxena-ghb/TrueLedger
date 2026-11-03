@@ -1,0 +1,13 @@
+ID,Date,Type,Description,Category,Account,Amount,Tag,Note
+tx-001,2026-10-26,income,Product Design Retainer,Salary,Chase Sapphire Checking,6250.00,#Income,Monthly engineering retainer
+tx-002,2026-10-25,expense,Whole Foods Market,Food,Amex Platinum Card,142.80,#Groceries,Weekly grocery stock
+tx-003,2026-10-24,expense,Equinox Fitness Club,Health,Amex Platinum Card,280.00,#Fitness,Monthly club membership
+tx-004,2026-10-22,expense,Apple Store Fifth Ave,Shopping,Apple Card Titanium,1299.00,#Tech,Hardware upgrade
+tx-005,2026-10-20,expense,Blue Bottle Coffee,Food,Vault Cash Reserve,18.50,#Coffee,Morning team coffee
+tx-006,2026-10-18,expense,Uber Premier Manhattan,Transport,Amex Platinum Card,64.20,#Travel,Airport transit
+tx-007,2026-10-15,income,Vanguard Dividend Payout,Investment,Chase Sapphire Checking,485.50,#Investment,Quarterly index payout
+tx-008,2026-10-12,expense,Con Edison Electric & Gas,Utilities,Chase Sapphire Checking,118.40,#Bills,Utility statement
+tx-009,2026-10-10,expense,Nobu Downtown Dinner,Food,Amex Platinum Card,312.00,#Dining,Client dinner
+tx-010,2026-10-05,expense,Criterion Channel & Netflix,Entertainment,Apple Card Titanium,34.99,#Subscriptions,Streaming services
+
+

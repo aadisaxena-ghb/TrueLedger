@@ -1,0 +1,980 @@
+/* ExpenseFlow — app.js
+   Renders every section from the store and wires up the forms. */
+(function () {
+  'use strict';
+
+  var S = EF.Store;
+  var state = S.state;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var ui = { ym: S.currentYM(), limit: 25, editingId: null, entryType: 'expense', day: null };
+
+  // first days of a month: the new month is nearly empty, so open on last month until a few entries exist
+  (function () {
+    var now = S.currentYM(), prev = S.shiftYM(now, -1);
+    if (S.monthStats(now).count < 3 && S.monthStats(prev).count >= 3) ui.ym = prev;
+  })();
+
+  function $(id) { return document.getElementById(id); }
+  function make(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function whole(n, o) { o = o || {}; o.whole = true; return S.fmt(n, o); }
+  function showErr(id, msg) { var e = $(id); if (e) { e.textContent = msg || ''; e.hidden = !msg; } }
+
+  // make any element behave like a button for mouse and keyboard
+  function clickable(el, fn, label) {
+    el.setAttribute('role', 'button'); el.tabIndex = 0;
+    if (label) el.setAttribute('aria-label', label);
+    el.addEventListener('click', function (e) { if (e.target.closest('button') && e.target !== el) return; fn(e); });
+    el.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); fn(e); }
+    });
+  }
+  function jump(id) { var el = $(id); if (el) el.scrollIntoView(); }
+
+  // set the ledger filters in one go, then scroll there
+  function goLedger(o) {
+    o = o || {};
+    $('f-search').value = o.search || '';
+    $('f-type').value = o.type || 'all';
+    $('f-category').value = o.category || 'all';
+    $('f-account').value = o.account || 'all';
+    $('f-period').value = 'month';
+    ui.day = o.day || null;
+    ui.limit = 25;
+    renderLedger();
+    jump('ledger');
+  }
+
+  /* ---------- tiny number tween ---------- */
+  function setNum(el, value, opts) {
+    var from = typeof el._v === 'number' ? el._v : 0;
+    el._v = value;
+    if (el._raf) cancelAnimationFrame(el._raf);
+    if (reduce || from === value) { el.textContent = S.fmt(value, opts); return; }
+    var start = performance.now(), dur = 520;
+    (function step(now) {
+      var k = clamp((now - start) / dur, 0, 1), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = S.fmt(from + (value - from) * e, opts);
+      if (k < 1) el._raf = requestAnimationFrame(step);
+    })(start);
+  }
+
+  /* ---------- toast ---------- */
+  var toastTimer;
+  function toast(msg, act) {
+    var t = $('toast'), b = $('toast-act');
+    $('toast-msg').textContent = msg;
+    if (act) {
+      b.hidden = false; b.textContent = act.label;
+      b.onclick = function () { act.fn(); t.classList.remove('on'); };
+    } else { b.hidden = true; b.onclick = null; }
+    t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('on'); }, act ? 6000 : 2600);
+  }
+
+  /* ---------- dates ---------- */
+  function fmtDate(d) {
+    var dt = new Date(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+    var o = { day: 'numeric', month: 'short' };
+    if (dt.getFullYear() !== new Date().getFullYear()) o.year = '2-digit';
+    return dt.toLocaleDateString('en-GB', o);
+  }
+
+  /* ============ THE MONTH ============ */
+  function renderMonth() {
+    var st = S.monthStats(ui.ym);
+    var prev = S.monthStats(S.shiftYM(ui.ym, -1));
+
+    $('month-label').textContent = S.monthLabel(ui.ym);
+    $('month-next').disabled = ui.ym >= S.currentYM();
+    $('demo-note').hidden = !state.isDemo;
+
+    setNum($('s-income'), st.income, { whole: true });
+    setNum($('s-spent'), st.spent, { whole: true });
+    setNum($('s-net'), st.net, { whole: true, plus: true });
+    setNum($('s-balance'), S.totalBalance(), { whole: true });
+
+    $('s-income-sub').textContent = st.income ? 'received this month' : 'nothing received yet';
+    $('s-spent-sub').textContent = st.isNow && st.spent ? whole(st.perDay) + ' a day so far' : (st.spent ? 'over the month' : 'nothing spent yet');
+    $('s-net-sub').textContent = st.rate == null ? 'no income to compare' : (st.rate >= 0 ? Math.round(st.rate * 100) + '% of income kept' : 'spent more than came in');
+    var counted = state.accounts.filter(function (a) { return a.counted; }).length;
+    $('s-balance-sub').textContent = 'across ' + counted + (counted === 1 ? ' account' : ' accounts');
+    $('s-net').classList.toggle('red', st.net < 0);
+
+    // budget cells
+    var budget = Number(state.profile.budget) || 0;
+    var host = $('budget-cells');
+    var N = 50;
+    if (host.children.length !== N) {
+      host.textContent = '';
+      for (var i = 0; i < N; i++) host.appendChild(make('i'));
+    }
+    var used = budget > 0 ? st.spent / budget : 0;
+    var filled = Math.round(clamp(used, 0, 1) * N);
+    for (var c = 0; c < N; c++) {
+      var cell = host.children[c];
+      cell.className = c < filled ? (used > 1 ? 'f over' : (used > 0.85 ? 'f warn' : 'f')) : '';
+      cell.title = budget > 0 ? whole(budget * (c + 1) / N) + ' of ' + whole(budget) : '';
+    }
+    host.setAttribute('aria-label', budget > 0 ? Math.round(used * 100) + ' percent of the budget used' : 'No budget set');
+
+    var left = $('budget-left'), pace = $('budget-pace');
+    if (budget <= 0) {
+      left.textContent = 'No monthly limit set.';
+      pace.textContent = '';
+      $('budget-edit').textContent = 'Set a limit';
+    } else {
+      $('budget-edit').textContent = 'Change limit';
+      left.textContent = st.spent <= budget
+        ? whole(budget - st.spent) + ' left of ' + whole(budget)
+        : whole(st.spent - budget) + ' over the ' + whole(budget) + ' limit';
+      if (st.isNow && st.spent > 0) {
+        pace.textContent = 'At this pace: ' + whole(st.projected) + ' by month end';
+        pace.className = st.projected > budget ? 'bad' : '';
+      } else { pace.textContent = ''; pace.className = ''; }
+    }
+    st._prev = prev;
+    return st;
+  }
+
+  /* ============ ACCOUNTS ============ */
+  function renderAccounts() {
+    var ul = $('acc-list');
+    ul.textContent = '';
+    if (!state.accounts.length) {
+      ul.appendChild(make('li', 'empty', 'No accounts yet. Add one to start tracking.'));
+      return;
+    }
+    state.accounts.forEach(function (a) {
+      var bal = S.balanceOf(a);
+      var li = make('li', 'acc' + (a.counted ? '' : ' off'));
+      var info = make('div', 'acc-info');
+      info.appendChild(make('span', 'acc-name', a.name));
+      info.appendChild(make('span', 'mono acc-type', a.type));
+      var amt = make('span', 'acc-bal num money' + (bal < 0 ? ' red' : ''), S.fmt(bal, { trim: true }));
+      var tools = make('div', 'acc-tools');
+
+      var sw = make('button', 'switch');
+      sw.type = 'button';
+      sw.setAttribute('role', 'switch');
+      sw.setAttribute('aria-checked', String(a.counted));
+      sw.setAttribute('aria-label', 'Count ' + a.name + ' in totals');
+      sw.appendChild(make('span', 'mono', a.counted ? 'Counted' : 'Left out'));
+      sw.appendChild(make('i'));
+      sw.addEventListener('click', function () { S.toggleCounted(a.id); });
+
+      var del = make('button', 'text-btn small', 'Delete');
+      del.type = 'button';
+      del.setAttribute('aria-label', 'Delete ' + a.name);
+      del.addEventListener('click', function () {
+        var n = state.transactions.filter(function (t) { return t.accountId === a.id || t.toAccountId === a.id; }).length;
+        confirmDialog('Delete ' + a.name + '?',
+          n ? 'This also removes its ' + n + (n === 1 ? ' entry.' : ' entries.') + ' You can\u2019t undo this.' : 'You can\u2019t undo this.', 'Delete account')
+          .then(function (yes) { if (yes) { S.deleteAccount(a.id); toast('Account deleted'); } });
+      });
+      tools.appendChild(sw); tools.appendChild(del);
+
+      clickable(info, function () { goLedger({ account: a.id }); }, 'Show entries in ' + a.name);
+      li.appendChild(info); li.appendChild(amt); li.appendChild(tools);
+      ul.appendChild(li);
+    });
+  }
+
+  /* ============ LEDGER ============ */
+  function fillFilterOptions() {
+    var fa = $('f-account'), fc = $('f-category');
+    var va = fa.value || 'all', vc = fc.value || 'all';
+    fa.textContent = ''; fc.textContent = '';
+    fa.appendChild(new Option('All accounts', 'all'));
+    state.accounts.forEach(function (a) { fa.appendChild(new Option(a.name, a.id)); });
+    fc.appendChild(new Option('All categories', 'all'));
+    var seen = {};
+    S.EXPENSE_CATS.concat(S.INCOME_CATS).forEach(function (c) { if (!seen[c]) { seen[c] = 1; fc.appendChild(new Option(c, c)); } });
+    fa.value = Array.prototype.some.call(fa.options, function (o) { return o.value === va; }) ? va : 'all';
+    fc.value = vc;
+  }
+
+  function filteredTx() {
+    var q = $('f-search').value.trim().toLowerCase();
+    var type = $('f-type').value, acc = $('f-account').value, cat = $('f-category').value;
+    var period = $('f-period').value, sort = $('f-sort').value;
+    var list = state.transactions.filter(function (t) {
+      if (period === 'month' && t.date.slice(0, 7) !== ui.ym) return false;
+      if (type !== 'all' && t.type !== type) return false;
+      if (acc !== 'all' && t.accountId !== acc && t.toAccountId !== acc) return false;
+      if (ui.day && t.date !== ui.day) return false;
+      if (cat !== 'all' && t.category !== cat) return false;
+      if (q) {
+        var hay = (t.description + ' ' + t.category + ' ' + (t.note || '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+    list.sort(function (a, b) {
+      if (sort === 'amt-desc') return b.amount - a.amount;
+      if (sort === 'amt-asc') return a.amount - b.amount;
+      if (sort === 'date-asc') return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+    });
+    return list;
+  }
+
+  function renderLedger() {
+    var list = filteredTx();
+    var ul = $('tx-list');
+    ul.textContent = '';
+    var chips = $('f-chips');
+    chips.textContent = '';
+    if (ui.day) {
+      var chip = make('button', 'chip', 'Day: ' + fmtDate(ui.day) + '  \u00D7');
+      chip.type = 'button';
+      chip.setAttribute('aria-label', 'Clear the day filter');
+      chip.addEventListener('click', function () { ui.day = null; ui.limit = 25; renderLedger(); });
+      chips.appendChild(chip);
+    }
+    $('ledger-count').textContent = list.length + (list.length === 1 ? ' entry' : ' entries');
+
+    if (!list.length) {
+      var filtering = ui.day || $('f-search').value || $('f-type').value !== 'all' || $('f-account').value !== 'all' || $('f-category').value !== 'all';
+      var li = make('li', 'empty');
+      li.appendChild(make('span', null, filtering ? 'Nothing matches those filters.' : 'Nothing logged for ' + S.monthLabel(ui.ym) + '.'));
+      var b = make('button', 'link-btn', filtering ? 'Clear filters' : 'Add the first entry');
+      b.type = 'button';
+      b.addEventListener('click', function () { filtering ? clearFilters() : openEntry(); });
+      li.appendChild(b);
+      ul.appendChild(li);
+      $('more-btn').hidden = true;
+      return;
+    }
+
+    list.slice(0, ui.limit).forEach(function (t) {
+      var acc = S.accountById(t.accountId), to = t.toAccountId ? S.accountById(t.toAccountId) : null;
+      var li = make('li', 'tx tx-' + t.type);
+      li.title = 'Click to edit';
+      li.addEventListener('click', function (e) { if (!e.target.closest('button')) openEntry(t); });
+      li.appendChild(make('span', 'mono tx-date', fmtDate(t.date)));
+
+      var main = make('div', 'tx-main');
+      main.appendChild(make('span', 'tx-desc', t.description));
+      var meta = make('span', 'mono tx-meta');
+      if (t.type === 'transfer') meta.textContent = (acc ? acc.name : '?') + ' to ' + (to ? to.name : '?');
+      else meta.textContent = t.category + '  \u2022  ' + (acc ? acc.name : 'Deleted account');
+      if (t.note) meta.textContent += '  \u2022  ' + t.note;
+      if (t.recurringId) meta.textContent += '  \u2022  Repeats monthly';
+      main.appendChild(meta);
+      li.appendChild(main);
+
+      var sign = t.type === 'income' ? '+' : (t.type === 'expense' ? '\u2212' : '');
+      var amt = make('span', 'tx-amt num money', sign + S.fmt(t.amount).replace(/^\u2212/, ''));
+      li.appendChild(amt);
+
+      var tools = make('div', 'tx-tools');
+      var ed = make('button', 'text-btn small', 'Edit'); ed.type = 'button';
+      ed.setAttribute('aria-label', 'Edit ' + t.description);
+      ed.addEventListener('click', function () { openEntry(t); });
+      var de = make('button', 'text-btn small', 'Delete'); de.type = 'button';
+      de.setAttribute('aria-label', 'Delete ' + t.description);
+      de.addEventListener('click', function () {
+        var copy = Object.assign({}, t);
+        S.deleteTx(t.id);
+        toast('Entry deleted', { label: 'Undo', fn: function () { S.restoreTx(copy); } });
+      });
+      tools.appendChild(ed); tools.appendChild(de);
+      li.appendChild(tools);
+      ul.appendChild(li);
+    });
+
+    var more = $('more-btn');
+    more.hidden = list.length <= ui.limit;
+    more.textContent = 'Show ' + Math.min(25, list.length - ui.limit) + ' more';
+  }
+
+  function clearFilters() {
+    $('f-search').value = ''; $('f-type').value = 'all'; $('f-account').value = 'all';
+    $('f-category').value = 'all';
+    ui.day = null;
+    ui.limit = 25; renderLedger();
+  }
+
+  /* ============ GOALS ============ */
+  function renderGoals() {
+    var ul = $('goal-list');
+    ul.textContent = '';
+    if (!state.goals.length) {
+      ul.appendChild(make('li', 'empty', 'No goals yet. Name one thing you are saving for.'));
+      return;
+    }
+    state.goals.forEach(function (g) {
+      var pct = g.target > 0 ? clamp(g.saved / g.target, 0, 1) : 0;
+      var done = g.target > 0 && g.saved >= g.target;
+      var li = make('li', 'goal' + (done ? ' done' : ''));
+      var top = make('div', 'goal-top');
+      top.appendChild(make('span', 'goal-name', g.name));
+      top.appendChild(make('span', 'goal-amt num money', whole(g.saved) + ' / ' + whole(g.target)));
+      var cells = make('div', 'cells sm');
+      cells.setAttribute('role', 'img');
+      cells.setAttribute('aria-label', g.name + ': ' + Math.round(pct * 100) + ' percent saved');
+      var N = 30, filled = Math.round(pct * N);
+      for (var i = 0; i < N; i++) cells.appendChild(make('i', i < filled ? 'f' : ''));
+      var foot = make('div', 'goal-foot');
+      foot.appendChild(make('span', 'mono goal-pct', done ? 'Reached' : Math.round(pct * 100) + '% saved, ' + whole(Math.max(0, g.target - g.saved)) + ' to go'));
+      var tools = make('div', 'acc-tools');
+      var add = make('button', 'ghost-btn small', 'Add money'); add.type = 'button';
+      add.addEventListener('click', function () { openContrib(g); });
+      var del = make('button', 'text-btn small', 'Delete'); del.type = 'button';
+      del.setAttribute('aria-label', 'Delete goal ' + g.name);
+      del.addEventListener('click', function () {
+        confirmDialog('Delete this goal?', g.name + ' (' + whole(g.saved) + ' saved).', 'Delete goal')
+          .then(function (yes) { if (yes) { S.deleteGoal(g.id); toast('Goal deleted'); } });
+      });
+      tools.appendChild(add); tools.appendChild(del);
+      foot.appendChild(tools);
+      li.appendChild(top); li.appendChild(cells); li.appendChild(foot);
+      ul.appendChild(li);
+    });
+  }  function openGoal() {
+    $('g-name').value = ''; $('g-target').value = ''; $('g-saved').value = '';
+    showErr('goal-error'); openModal($('goal-modal'));
+    setTimeout(function () { $('g-name').focus(); }, 30);
+  }
+  function num(v) { return parseFloat(String(v).replace(/,/g, '')) || 0; }
+  function submitGoal(ev) {
+    ev.preventDefault();
+    var name = $('g-name').value.trim(), target = num($('g-target').value), saved = num($('g-saved').value);
+    if (!name) return showErr('goal-error', 'Give the goal a name.');
+    if (!(target > 0)) return showErr('goal-error', 'Enter a target amount greater than zero.');
+    S.addGoal({ name: name, target: target, saved: Math.max(0, saved) });
+    closeModal($('goal-modal')); toast('Goal created');
+  }
+  function openContrib(g) {
+    ui.goalId = g.id; $('contrib-title').textContent = g.name; $('c-amount').value = '';
+    showErr('contrib-error'); openModal($('contrib-modal'));
+    setTimeout(function () { $('c-amount').focus(); }, 30);
+  }
+  function applyContrib(sign) {
+    var amt = num($('c-amount').value);
+    if (!(amt > 0)) return showErr('contrib-error', 'Enter an amount greater than zero.');
+    var g = state.goals.filter(function (x) { return x.id === ui.goalId; })[0];
+    var was = g && g.target > 0 && g.saved >= g.target;
+    S.contributeGoal(ui.goalId, sign * amt);
+    closeModal($('contrib-modal'));
+    var now = state.goals.filter(function (x) { return x.id === ui.goalId; })[0];
+    var reached = !was && now && now.saved >= now.target;
+    if (window.EF && window.EF.FX) {
+      if (reached) window.EF.FX.onGoalReached();
+      else if (sign > 0) window.EF.FX.burstCoins(window.innerWidth / 2, window.innerHeight / 2, 16);
+    }
+    toast(reached ? 'Goal reached. Well done.' : (sign > 0 ? 'Added to goal' : 'Taken out of goal'));
+  }
+
+  /* ============ REPEATING ENTRIES ============ */
+  function renderRepeatList() {
+    var ul = $('repeat-list');
+    ul.textContent = '';
+    if (!state.recurring.length) {
+      ul.appendChild(make('li', 'empty', 'Nothing repeats yet. Tick \u201CRepeat every month\u201D when you add an entry.'));
+      return;
+    }
+    state.recurring.forEach(function (r) {
+      var acc = S.accountById(r.accountId);
+      var li = make('li', 'rep');
+      var main = make('div', 'tx-main');
+      main.appendChild(make('span', 'tx-desc', r.description));
+      main.appendChild(make('span', 'mono tx-meta', whole(r.amount) + ' (' + r.type + '), day ' + r.day + ' of every month, ' + (acc ? acc.name : 'deleted account')));
+      var stop = make('button', 'ghost-btn small', 'Stop'); stop.type = 'button';
+      stop.addEventListener('click', function () { S.deleteRule(r.id); toast('Stopped. Past entries are kept.'); });
+      li.appendChild(main); li.appendChild(stop);
+      ul.appendChild(li);
+    });
+  }
+
+  /* ============ INSIGHTS ============ */
+  function renderCalendar() {
+    var host = $('cal'), ym = ui.ym;
+    host.textContent = '';
+    var totals = S.dayTotals(ym), dim = S.daysInMonth(ym);
+    var first = (new Date(+ym.slice(0, 4), +ym.slice(5, 7) - 1, 1).getDay() + 6) % 7;
+    var max = 0, maxDay = 0, d;
+    for (d = 1; d <= dim; d++) if ((totals[d] || 0) > max) { max = totals[d]; maxDay = d; }
+    ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(function (l) { host.appendChild(make('span', 'mono dow', l)); });
+    for (var b = 0; b < first; b++) host.appendChild(make('span', 'blank'));
+    var todayYM = S.currentYM(), todayN = new Date().getDate();
+    for (d = 1; d <= dim; d++) {
+      var v = totals[d] || 0;
+      var cell = make('div', 'day' + (ym === todayYM && d === todayN ? ' today' : ''));
+      var dot = make('i', v ? (d === maxDay ? 'top' : '') : 'z');
+      dot.style.setProperty('--s', max ? Math.sqrt(v / max).toFixed(3) : 0);
+      cell.appendChild(dot);
+      cell.appendChild(make('span', 'mono dn', String(d)));
+      if (v) {
+        (function (dd) {
+          var iso = ym + '-' + (dd < 10 ? '0' : '') + dd;
+          cell.classList.add('has');
+          clickable(cell, function () { goLedger({ day: iso }); }, 'Show entries for ' + dd + ' ' + S.monthLabel(ym, true));
+        })(d);
+      }
+      cell.title = d + ' ' + S.monthLabel(ym, true) + ': ' + (v ? S.fmt(v) : 'nothing spent');
+      host.appendChild(cell);
+    }
+    host.setAttribute('aria-label', max ? 'Spending per day. Heaviest day was the ' + maxDay + 'th.' : 'No spending logged this month');
+    $('cal-note').textContent = max ? 'Heaviest day: ' + maxDay + ' ' + S.monthLabel(ym, true) + ', ' + whole(max) + '. Bigger dot, bigger spend.' : 'No spending logged for ' + S.monthLabel(ym) + '.';
+  }
+
+  function renderInsights(st) {
+    var ul = $('cat-list');
+    ul.textContent = '';
+    if (!st.cats.length) {
+      ul.appendChild(make('li', 'empty', 'No spending logged for ' + S.monthLabel(ui.ym) + '.'));
+    } else {
+      var max = st.cats[0].total;
+      st.cats.forEach(function (c, i) {
+        var li = make('li', 'cat' + (i === 0 ? ' top' : ''));
+        var head = make('div', 'cat-head');
+        head.appendChild(make('span', 'cat-name', c.name));
+        head.appendChild(make('span', 'mono cat-pct', Math.round(c.total / st.spent * 100) + '%'));
+        head.appendChild(make('span', 'cat-amt num money', whole(c.total)));
+        clickable(li, function () { goLedger({ type: 'expense', category: c.name }); }, 'Show ' + c.name + ' entries');
+        var bar = make('div', 'dots');
+        bar.style.setProperty('--w', (c.total / max * 100).toFixed(1) + '%');
+        li.appendChild(head); li.appendChild(bar);
+        ul.appendChild(li);
+      });
+    }
+    renderTrend();
+    renderCalendar();
+    renderNotes(st);
+  }
+
+  function renderTrend() {
+    var months = [], i;
+    for (i = 5; i >= 0; i--) months.push(S.shiftYM(S.currentYM(), -i));
+    var data = months.map(function (m) { var s = S.monthStats(m); return { ym: m, inc: s.income, out: s.spent }; });
+    var max = 1;
+    data.forEach(function (d) { max = Math.max(max, d.inc, d.out); });
+    var W = 600, Hh = 230, base = 196, top = 14, bw = 30, gap = 6, step = W / 6;
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + Hh + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
+      '<defs><pattern id="halftone" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.7" fill="currentColor"/></pattern></defs>';
+    data.forEach(function (d, k) {
+      var x = k * step + (step - (bw * 2 + gap)) / 2;
+      var hi = (d.inc / max) * (base - top), ho = (d.out / max) * (base - top);
+      var sel = d.ym === ui.ym;
+      svg += '<g class="' + (sel ? 'sel' : '') + '" data-ym="' + d.ym + '"><title>' + S.monthLabel(d.ym) + ': in ' + whole(d.inc) + ', out ' + whole(d.out) + '</title>' +
+        '<rect class="hit" x="' + (k * step) + '" y="0" width="' + step + '" height="' + Hh + '" fill="transparent"/>' +
+        '<rect class="b-in" x="' + x + '" y="' + (base - hi) + '" width="' + bw + '" height="' + Math.max(hi, 0) + '" fill="url(#halftone)"/>' +
+        '<rect class="b-out" x="' + (x + bw + gap) + '" y="' + (base - ho) + '" width="' + bw + '" height="' + Math.max(ho, 0) + '"/>' +
+        '<text x="' + (k * step + step / 2) + '" y="' + (Hh - 10) + '" text-anchor="middle">' + S.monthLabel(d.ym, true) + '</text></g>';
+    });
+    svg += '<line x1="0" x2="' + W + '" y1="' + base + '" y2="' + base + '" class="axis"/></svg>';
+    $('trend').innerHTML = svg;
+  }
+
+  function renderNotes(st) {
+    var ul = $('notes');
+    ul.textContent = '';
+    var lines = [];
+    var name = S.monthLabel(ui.ym).split(' ')[0];
+    if (st.cats.length) {
+      var t = st.cats[0];
+      lines.push(t.name + ' took ' + Math.round(t.total / st.spent * 100) + '% of what you spent in ' + name + '.');
+    }
+    var prev = st._prev;
+    if (prev && prev.spent > 0 && st.spent > 0 && !st.isNow) {
+      var d = Math.round((st.spent - prev.spent) / prev.spent * 100);
+      lines.push(d === 0 ? 'Spending matched the month before.' : 'You spent ' + Math.abs(d) + '% ' + (d > 0 ? 'more' : 'less') + ' than ' + S.monthLabel(S.shiftYM(ui.ym, -1)).split(' ')[0] + '.');
+    } else if (prev && prev.spent > 0 && st.isNow && st.spent > 0) {
+      var d2 = Math.round((st.projected - prev.spent) / prev.spent * 100);
+      if (Math.abs(d2) >= 3) lines.push('At this pace ' + name + ' ends ' + Math.abs(d2) + '% ' + (d2 > 0 ? 'above' : 'below') + ' last month.');
+    }
+    if (st.biggest) lines.push('Biggest single spend: ' + st.biggest.description + ', ' + whole(st.biggest.amount) + ' on ' + fmtDate(st.biggest.date) + '.');
+    if (!lines.length) lines.push('Add a few entries and this page starts answering for you.');
+    lines.forEach(function (l) { ul.appendChild(make('li', null, l)); });
+  }
+
+  /* ============ END BLOCK ============ */
+  function renderEnd(st) {
+    var label = $('end-label'), title = $('end-title'), sub = $('end-sub');
+    var nm = (state.profile.name || '').trim();
+    if (st.cats.length) {
+      var t = st.cats[0];
+      label.textContent = (nm ? nm + ', in' : 'In') + ' ' + S.monthLabel(ui.ym).split(' ')[0] + ', the answer is';
+      title.textContent = whole(t.total) + ' went on ' + t.name + '.';
+      sub.textContent = Math.round(t.total / st.spent * 100) + '% of everything you spent. ' + whole(st.spent) + ' in total.';
+    } else {
+      label.textContent = 'Nothing to explain yet';
+      title.textContent = 'Log one spend and the answer starts here.';
+      sub.textContent = 'It takes about ten seconds.';
+    }
+  }
+
+  /* ============ KINETIC TITLES ============ */
+  function splitTitles() {
+    document.querySelectorAll('[data-kin]').forEach(function (h) {
+      var text = h.textContent;
+      h.setAttribute('aria-label', text);
+      h.textContent = '';
+      var words = text.split(' ');
+      var idx = 0;
+      words.forEach(function (w, wi) {
+        var word = make('span', 'kin-word');
+        word.setAttribute('aria-hidden', 'true');
+        w.split('').forEach(function (ch) {
+          var s = make('span', 'kin-ch', ch);
+          s.style.setProperty('--i', idx++);
+          word.appendChild(s);
+        });
+        h.appendChild(word);
+        if (wi < words.length - 1) h.appendChild(document.createTextNode(' '));
+      });
+    });
+    var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: 0.4 }) : null;
+    document.querySelectorAll('[data-kin], .end').forEach(function (el) {
+      if (io) io.observe(el); else el.classList.add('in');
+    });
+  }
+
+  /* ============ DIALOGS ============ */
+  function openModal(m) {
+    if (!m.open) m.showModal();
+    if (EF.Cursor) EF.Cursor.restack(); // keep the cursor above the dialog
+  }
+  function closeModal(m) { if (m.open) m.close(); }
+
+  document.addEventListener('click', function (e) {
+    var closer = e.target.closest && e.target.closest('[data-close]');
+    if (closer) { closeModal(closer.closest('dialog')); return; }
+    if (e.target.tagName === 'DIALOG') closeModal(e.target); // click on backdrop
+  });
+
+  function confirmDialog(title, text, yesLabel) {
+    return new Promise(function (resolve) {
+      var m = $('confirm-modal');
+      $('confirm-title').textContent = title;
+      $('confirm-text').textContent = text;
+      $('confirm-yes').textContent = yesLabel || 'Delete';
+      m.returnValue = '';
+      var done = function () { m.removeEventListener('close', done); resolve(m.returnValue === 'yes'); };
+      m.addEventListener('close', done);
+      openModal(m);
+    });
+  }
+
+  /* ---------- entry form ---------- */
+  function setEntryType(type) {
+    ui.entryType = type;
+    Array.prototype.forEach.call($('seg-type').children, function (b) {
+      var on = b.getAttribute('data-type') === type;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+    });
+    var isT = type === 'transfer';
+    $('e-to-wrap').hidden = !isT;
+    $('e-cat-wrap').hidden = isT;
+    $('e-acc-label').textContent = type === 'income' ? 'Into account' : (isT ? 'From account' : 'Paid from');
+    var cat = $('e-category'), prev = cat.value;
+    cat.textContent = '';
+    (type === 'income' ? S.INCOME_CATS : S.EXPENSE_CATS).forEach(function (c) { cat.appendChild(new Option(c, c)); });
+    if (Array.prototype.some.call(cat.options, function (o) { return o.value === prev; })) cat.value = prev;
+    $('e-desc').placeholder = isT ? 'Optional, e.g. Card bill' : (type === 'income' ? 'Salary, refund, invoice...' : 'Groceries, rent, coffee...');
+  }
+
+  function openEntry(tx) {
+    ui.editingId = tx ? tx.id : null;
+    $('entry-title').textContent = tx ? 'Edit entry' : 'Add entry';
+    $('entry-save').textContent = tx ? 'Save changes' : 'Save entry';
+    showErr('entry-error');
+    $('amt-sym').textContent = S.symbol();
+    $('e-repeat').checked = false;
+    $('e-repeat-wrap').hidden = !!tx;
+
+    ['e-account', 'e-to'].forEach(function (id) {
+      var sel = $(id); sel.textContent = '';
+      state.accounts.forEach(function (a) { sel.appendChild(new Option(a.name, a.id)); });
+    });
+
+    setEntryType(tx ? tx.type : 'expense');
+    $('e-amount').value = tx ? String(tx.amount) : '';
+    $('e-desc').value = tx ? tx.description : '';
+    $('e-date').value = tx ? tx.date : S.today();
+    $('e-note').value = tx ? (tx.note || '') : '';
+    if (tx) {
+      $('e-account').value = tx.accountId;
+      if (tx.toAccountId) $('e-to').value = tx.toAccountId;
+      if (tx.type !== 'transfer') $('e-category').value = tx.category;
+    } else if (state.accounts.length > 1) {
+      $('e-to').selectedIndex = 1;
+    }
+    openModal($('entry-modal'));
+    setTimeout(function () { $('e-amount').focus(); }, 30);
+  }
+
+  function submitEntry(ev) {
+    ev.preventDefault();
+    if (!state.accounts.length) return showErr('entry-error', 'Add an account first.');
+    var amount = parseFloat(String($('e-amount').value).replace(/,/g, ''));
+    var type = ui.entryType, desc = $('e-desc').value.trim(), date = $('e-date').value;
+    if (!(amount > 0)) return showErr('entry-error', 'Enter an amount greater than zero.');
+    if (!desc && type !== 'transfer') return showErr('entry-error', 'Say what it was, even in one word.');
+    if (!date) return showErr('entry-error', 'Pick a date.');
+    var accountId = $('e-account').value, toId = type === 'transfer' ? $('e-to').value : null;
+    if (type === 'transfer' && accountId === toId) return showErr('entry-error', 'Choose two different accounts.');
+
+    var rec = {
+      type: type, amount: Math.round(amount * 100) / 100, description: desc || 'Transfer', date: date,
+      category: type === 'transfer' ? 'Other' : $('e-category').value,
+      accountId: accountId, toAccountId: toId, note: $('e-note').value.trim()
+    };
+    var repeats = !ui.editingId && $('e-repeat').checked;
+    if (repeats) {
+      var rule = S.addRule({
+        type: type, description: rec.description, category: rec.category, accountId: accountId, toAccountId: toId,
+        amount: rec.amount, note: rec.note, day: Math.min(28, +date.slice(8, 10)), lastRun: date.slice(0, 7)
+      });
+      rec.recurringId = rule.id;
+    }
+    if (ui.editingId) { S.updateTx(ui.editingId, rec); toast('Changes saved'); }
+    else if (repeats) { S.addTx(rec); S.runRecurring(); toast('Saved. It will repeat on day ' + Math.min(28, +date.slice(8, 10)) + ' each month.'); }
+    else { S.addTx(rec); toast('Saved. ' + S.fmt(rec.amount) + ' ' + (type === 'income' ? 'received' : type === 'transfer' ? 'moved' : 'spent') + '.'); }
+    if (window.EF && window.EF.FX) window.EF.FX.onSaveEntry();
+    ui.ym = date.slice(0, 7) > S.currentYM() ? S.currentYM() : date.slice(0, 7);
+    closeModal($('entry-modal'));
+    render();
+  }
+
+  /* ---------- account form ---------- */
+  function openAccount() {
+    var t = $('a-type'); t.textContent = '';
+    S.ACCOUNT_TYPES.forEach(function (x) { t.appendChild(new Option(x, x)); });
+    $('a-name').value = ''; $('a-balance').value = '';
+    showErr('account-error'); openModal($('account-modal'));
+    setTimeout(function () { $('a-name').focus(); }, 30);
+  }
+  function submitAccount(ev) {
+    ev.preventDefault();
+    var name = $('a-name').value.trim();
+    if (!name) return showErr('account-error', 'Give the account a name.');
+    var bal = parseFloat(String($('a-balance').value).replace(/,/g, '')) || 0;
+    S.addAccount({ name: name, type: $('a-type').value, opening: bal });
+    closeModal($('account-modal')); toast(name + ' added');
+  }
+
+  /* ---------- settings ---------- */
+  function openSettings(focusBudget) {
+    $('p-name').value = state.profile.name || '';
+    var cur = $('p-currency'); cur.textContent = '';
+    Object.keys(S.CURRENCIES).forEach(function (k) { cur.appendChild(new Option(k + '  ' + S.CURRENCIES[k].sym, k)); });
+    cur.value = state.profile.currency;
+    $('p-budget').value = state.profile.budget || '';
+    openModal($('settings-modal'));
+    setTimeout(function () { (focusBudget ? $('p-budget') : $('p-name')).focus(); }, 30);
+  }
+  function submitSettings(ev) {
+    ev.preventDefault();
+    S.setProfile({
+      name: $('p-name').value.trim(),
+      currency: $('p-currency').value,
+      budget: Math.max(0, parseFloat(String($('p-budget').value).replace(/,/g, '')) || 0)
+    });
+    closeModal($('settings-modal'));
+    toast('Settings saved');
+  }
+
+  function download(filename, text) {
+    var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 500);
+  }
+
+  /* ============ RENDER ============ */
+  function render() {
+    var st = renderMonth();
+    renderAccounts();
+    renderGoals();
+    $('repeat-btn').textContent = state.recurring.length ? 'Repeating entries (' + state.recurring.length + ')' : 'Repeating entries';
+    if ($('repeat-modal').open) renderRepeatList();
+    fillFilterOptions();
+    renderLedger();
+    renderInsights(st);
+    renderEnd(st);
+    document.body.classList.toggle('privacy', !!state.privacy);
+    var pb = $('privacy-btn');
+    pb.textContent = state.privacy ? 'Show numbers' : 'Hide numbers';
+    pb.setAttribute('aria-pressed', String(!!state.privacy));
+    EF.Hero.setData({
+      balance: S.totalBalance(), spent: st.spent, monthName: S.monthLabel(ui.ym).split(' ')[0],
+      accounts: state.accounts.filter(function (a) { return a.counted; }).map(function (a) { return { id: a.id, name: a.name, balance: S.balanceOf(a) }; })
+    });
+    if (window.EF && window.EF.FX) {
+      window.EF.FX.scanDOM();
+    }
+  }
+
+  function exportCsv() {
+    if (!state.transactions.length) { toast('Nothing to export yet'); return; }
+    download('expenseflow-' + S.today() + '.csv', S.toCSV());
+    toast('CSV downloaded');
+  }
+  function toggleTheme() {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light', true);
+  }
+
+  /* ============ COMMAND PALETTE ============ */
+  var pal = { items: [], idx: 0 };
+  function commands() {
+    var c = [];
+    function add(label, hint, fn) { c.push({ label: label, hint: hint || '', fn: fn }); }
+    var light = document.documentElement.getAttribute('data-theme') === 'light';
+    add('Add entry', 'N', function () { openEntry(); });
+    add('New goal', '', openGoal);
+    add('Add account', '', openAccount);
+    add('Go to the month', 'Section', function () { jump('month'); });
+    add('Go to accounts', 'Section', function () { jump('accounts'); });
+    add('Go to goals', 'Section', function () { jump('goals'); });
+    add('Go to the ledger', 'Section', function () { jump('ledger'); });
+    add('Go to where it went', 'Section', function () { jump('insights'); });
+    add('Previous month', '', function () { $('month-prev').click(); });
+    add('Next month', '', function () { $('month-next').click(); });
+    add(light ? 'Switch to dark theme' : 'Switch to light theme', '', toggleTheme);
+    add(state.privacy ? 'Show numbers' : 'Hide numbers', '', function () { S.setPrivacy(!state.privacy); });
+    add('Settings', '', function () { openSettings(); });
+    add('Repeating entries', '', function () { renderRepeatList(); openModal($('repeat-modal')); });
+    add('Export CSV', '', exportCsv);
+    if (EF.Intro) add('Replay the intro', '', function () { EF.Intro.play(); });
+    if (EF.Gate && EF.Gate.hasPin()) add('Lock wallet', '', function () { EF.Gate.lock(); });
+    if (window.EF && window.EF.FX) {
+      add(EF.FX.isSoundEnabled() ? 'Mute sound effects' : 'Enable sound effects', 'Audio', function () {
+        var on = EF.FX.toggleSound();
+        toast(on ? 'Sound effects enabled 🔊' : 'Sound effects muted 🔇');
+      });
+      add('Jackpot celebration', 'Easter Egg', function () { EF.FX.burstJackpot(); });
+      add('Gold Tycoon mode', 'Easter Egg', function () { EF.FX.onWalletClick(); });
+    }
+    S.EXPENSE_CATS.forEach(function (cat) { add('Show ' + cat + ' spending', 'Ledger', function () { goLedger({ type: 'expense', category: cat }); }); });
+    state.accounts.forEach(function (a) { add('Show entries in ' + a.name, 'Ledger', function () { goLedger({ account: a.id }); }); });
+    return c;
+  }
+  function renderPalette() {
+    var q = $('pal-input').value.trim().toLowerCase();
+    var toks = q.split(/\s+/).filter(Boolean);
+    var all = commands().filter(function (it) {
+      var l = it.label.toLowerCase();
+      return toks.every(function (t) { return l.indexOf(t) > -1; });
+    }).slice(0, 9);
+    if (q) all.unshift({ label: 'Search the ledger for \u201C' + $('pal-input').value.trim() + '\u201D', hint: 'Ledger', fn: function () { goLedger({ search: $('pal-input').value.trim() }); } });
+    pal.items = all; pal.idx = 0;
+    var ul = $('pal-list');
+    ul.textContent = '';
+    all.forEach(function (it, i) {
+      var li = make('li');
+      li.id = 'pal-' + i;
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', String(i === 0));
+      li.appendChild(make('span', null, it.label));
+      li.appendChild(make('span', 'h', it.hint));
+      li.addEventListener('mousemove', function () { palSelect(i); });
+      li.addEventListener('click', function () { palRun(i); });
+      ul.appendChild(li);
+    });
+    if (!all.length) ul.appendChild(make('li', 'none', 'Nothing matches. Try \u201Cadd\u201D, \u201Cledger\u201D or a category.'));
+    $('pal-input').setAttribute('aria-activedescendant', all.length ? 'pal-0' : '');
+  }
+  function palSelect(i) {
+    var lis = $('pal-list').children;
+    if (!pal.items.length) return;
+    pal.idx = (i + pal.items.length) % pal.items.length;
+    for (var k = 0; k < lis.length; k++) lis[k].setAttribute('aria-selected', String(k === pal.idx));
+    lis[pal.idx].scrollIntoView({ block: 'nearest' });
+    $('pal-input').setAttribute('aria-activedescendant', 'pal-' + pal.idx);
+  }
+  function palRun(i) {
+    var it = pal.items[i];
+    if (!it) return;
+    closeModal($('palette'));
+    setTimeout(it.fn, 30);
+  }
+  function openPalette() {
+    $('pal-input').value = '';
+    renderPalette();
+    openModal($('palette'));
+    setTimeout(function () { $('pal-input').focus(); }, 20);
+  }
+
+  /* ============ NAV HIGHLIGHT ============ */
+  function initScrollSpy() {
+    if (!('IntersectionObserver' in window)) return;
+    var links = {};
+    document.querySelectorAll('.nav a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        Object.keys(links).forEach(function (k) { links[k].classList.toggle('on', k === e.target.id); });
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    Object.keys(links).forEach(function (id) { var el = $(id); if (el) io.observe(el); });
+  }
+
+  /* ============ THEME ============ */
+  function applyTheme(t, animate) {
+    var root = document.documentElement;
+    if (animate) { root.classList.add('theme-anim'); setTimeout(function () { root.classList.remove('theme-anim'); }, 450); }
+    root.setAttribute('data-theme', t);
+    try { localStorage.setItem('expenseflow.theme', t); } catch (e) {}
+    var b = $('theme-btn');
+    b.textContent = t === 'light' ? 'Go dark' : 'Go light';
+    b.setAttribute('aria-pressed', String(t === 'light'));
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', t === 'light' ? '#f2efe9' : '#0d0e10');
+  }
+
+  /* ============ WIRING ============ */
+  function init() {
+    splitTitles();
+    EF.Hero.init();
+
+    S.subscribe(render);
+
+    // header / global
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark', false);
+    $('theme-btn').addEventListener('click', toggleTheme);
+    $('jump-btn').addEventListener('click', openPalette);
+    $('pal-input').addEventListener('input', renderPalette);
+    $('pal-input').addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); palSelect(pal.idx + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); palSelect(pal.idx - 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); palRun(pal.idx); }
+    });
+    document.querySelectorAll('.stat[data-go]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var g = b.getAttribute('data-go');
+        if (g === 'income') goLedger({ type: 'income' });
+        else if (g === 'expense') goLedger({ type: 'expense' });
+        else jump(g);
+      });
+    });
+    EF.Hero.onTag = function (id) { goLedger({ account: id }); };
+    initScrollSpy();
+    $('add-btn').addEventListener('click', function () { openEntry(); });
+    $('fab').addEventListener('click', function () { openEntry(); });
+    $('end-add').addEventListener('click', function () { openEntry(); });
+    $('settings-btn').addEventListener('click', function () { openSettings(); });
+    $('budget-edit').addEventListener('click', function () { openSettings(true); });
+    $('privacy-btn').addEventListener('click', function () { S.setPrivacy(!state.privacy); });
+    $('add-account-btn').addEventListener('click', openAccount);
+    $('add-goal-btn').addEventListener('click', openGoal);
+    $('goal-form').addEventListener('submit', submitGoal);
+    $('contrib-form').addEventListener('submit', function (e) { e.preventDefault(); applyContrib(1); });
+    $('c-take').addEventListener('click', function () { applyContrib(-1); });
+    $('repeat-btn').addEventListener('click', function () { renderRepeatList(); openModal($('repeat-modal')); });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) S.runRecurring(); });
+    document.addEventListener('ef:toast', function (e) { toast(e.detail); });
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+    $('fresh-btn').addEventListener('click', function () {
+      confirmDialog('Clear the sample data?', 'Your accounts and entries will be replaced with an empty Bank and Cash account.', 'Start fresh')
+        .then(function (yes) { if (yes) { S.startFresh(); toast('Fresh start. Add your first entry.'); } });
+    });
+
+    // month nav
+    $('month-prev').addEventListener('click', function () {
+      ui.ym = S.shiftYM(ui.ym, -1); ui.limit = 25; ui.day = null; render();
+      if (window.EF && window.EF.FX) window.EF.FX.onMonthChange();
+    });
+    $('month-next').addEventListener('click', function () {
+      if (ui.ym < S.currentYM()) {
+        ui.ym = S.shiftYM(ui.ym, 1); ui.limit = 25; ui.day = null; render();
+        if (window.EF && window.EF.FX) window.EF.FX.onMonthChange();
+      }
+    });
+
+    // six-month chart: click a month to look at it
+    $('trend').addEventListener('click', function (e) {
+      var g = e.target.closest('g[data-ym]');
+      if (!g) return;
+      ui.ym = g.getAttribute('data-ym'); ui.limit = 25; ui.day = null;
+      render();
+      if (window.EF && window.EF.FX) window.EF.FX.onMonthChange();
+    });
+
+    // ledger filters
+    ['f-type', 'f-account', 'f-category', 'f-period', 'f-sort'].forEach(function (id) {
+      $(id).addEventListener('change', function () { ui.limit = 25; renderLedger(); });
+    });
+    var st;
+    $('f-search').addEventListener('input', function () {
+      clearTimeout(st); st = setTimeout(function () { ui.limit = 25; renderLedger(); }, 120);
+    });
+    $('more-btn').addEventListener('click', function () { ui.limit += 25; renderLedger(); });
+
+    // forms
+    $('seg-type').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-type]');
+      if (b) setEntryType(b.getAttribute('data-type'));
+    });
+    $('entry-form').addEventListener('submit', submitEntry);
+    $('account-form').addEventListener('submit', submitAccount);
+    $('settings-form').addEventListener('submit', submitSettings);
+
+    // data tools
+    $('export-btn').addEventListener('click', function () {
+      if (!state.transactions.length) { toast('Nothing to export yet'); return; }
+      download('expenseflow-' + S.today() + '.csv', S.toCSV());
+      toast('CSV downloaded');
+    });
+    $('import-btn').addEventListener('click', function () { $('import-file').click(); });
+    $('import-file').addEventListener('change', function (e) {
+      var f = e.target.files[0]; if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var n = S.importCSV(String(r.result));
+        toast(n ? n + ' entries imported' : 'No rows could be read. Needs Date and Amount columns.');
+        if (n) closeModal($('settings-modal'));
+      };
+      r.readAsText(f);
+      e.target.value = '';
+    });
+    $('demo-btn').addEventListener('click', function () {
+      confirmDialog('Load sample data?', 'This replaces your current accounts and entries.', 'Load sample')
+        .then(function (yes) { if (yes) { S.loadDemo(); closeModal($('settings-modal')); toast('Sample data loaded'); } });
+    });
+    $('wipe-btn').addEventListener('click', function () {
+      confirmDialog('Erase everything?', 'All accounts and entries are removed from this browser. Export a CSV first if you want a copy.', 'Erase')
+        .then(function (yes) { if (yes) { S.startFresh(); closeModal($('settings-modal')); toast('All data erased'); } });
+    });
+
+    // keyboard: N = new entry
+    document.addEventListener('keydown', function (e) {
+      if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if ($('palette').open) closeModal($('palette')); else openPalette(); return; }
+      var tg = (e.target.tagName || '').toLowerCase();
+      if (e.key === '/' && tg !== 'input' && tg !== 'textarea' && tg !== 'select' && !document.querySelector('dialog[open]')) { e.preventDefault(); openPalette(); return; }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'n' || e.metaKey || e.ctrlKey || e.altKey) return;
+      var tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || document.querySelector('dialog[open]')) return;
+      e.preventDefault(); openEntry();
+    });
+
+    // header gets a background once we leave the hero
+    var bar = $('bar');
+    function onScroll() {
+      bar.classList.toggle('solid', window.scrollY > window.innerHeight * 0.6);
+      bar.classList.toggle('on-hero', $('top').getBoundingClientRect().bottom > 64);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+    render();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
