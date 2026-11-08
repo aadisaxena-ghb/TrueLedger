@@ -118,10 +118,12 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     <a href="#goals">Goals</a>
     <a href="#ledger">Ledger</a>
     <a href="#insights">Insights</a>
+    <a href="#download" class="nav-dl">Get App</a>
   </nav>
   <div class="bar-actions">
     <button class="text-btn jump-btn" id="jump-btn" type="button" aria-label="Open command palette">Jump (Ctrl K)</button>
     <button class="text-btn" id="privacy-btn" type="button" aria-pressed="false">Hide numbers</button>
+    <button class="text-btn download-btn-bar" id="bar-download-btn" type="button" aria-label="Install App"><span class="dl-arrow">↓</span> App</button>
     <button class="text-btn" id="sound-btn" type="button" aria-pressed="false" title="Toggle audio effects"><span class="sound-icon">🔇</span> Sound: OFF</button>
     <button class="text-btn" id="theme-btn" type="button" aria-pressed="false">Go light</button>
     <button class="text-btn" id="settings-btn" type="button">Settings</button>
@@ -354,6 +356,93 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     <ul class="notes" id="notes"></ul>
   </section>
 
+  <!-- ============ DOWNLOAD / GET THE APP ============ -->
+  <section class="sec download-sec" id="download" aria-labelledby="t-download">
+    <div class="drift-word" data-drift="-0.22" aria-hidden="true">INSTALL</div>
+    <div class="sec-head">
+      <h2 class="title" id="t-download" data-kin>GET THE APP</h2>
+      <p class="mono sub-hint">Zero app store friction • Instant home screen vault • 100% offline &amp; private</p>
+    </div>
+
+    <div class="download-grid">
+      <!-- Main Download Card -->
+      <div class="panel download-hero-card">
+        <div class="download-badge-row">
+          <span class="mono dl-badge live">PWA Standalone</span>
+          <span class="mono dl-badge">Local Vault</span>
+          <span class="mono dl-badge">0 Trackers</span>
+          <span class="mono dl-badge" id="app-shell-status">Offline Ready</span>
+        </div>
+        <div class="download-app-identity">
+          <div class="app-icon-wrap">
+            <img src="assets/icons/icon-192.png" alt="TrueLedger App Icon" class="app-icon-img" width="72" height="72">
+          </div>
+          <div class="app-info">
+            <h3 class="app-name">TrueLedger</h3>
+            <p class="mono app-desc">Personal expense tracker &amp; financial vault. Opens full-screen like a native app on phone and desktop.</p>
+          </div>
+        </div>
+
+        <div class="download-actions">
+          <button type="button" class="solid-btn download-main-btn" id="main-download-btn">
+            <span class="dl-symbol">↓</span> <span id="main-download-text">Install App Now</span>
+          </button>
+          <span class="mono dl-status" id="dl-status-text">Tap to install directly on your device</span>
+        </div>
+
+        <div class="download-platforms-tabs">
+          <div class="platform-cards">
+            <div class="plat-card" data-plat="ios">
+              <div class="plat-head">
+                <span class="plat-icon">🍎</span>
+                <span class="mono plat-title">iOS (Safari)</span>
+              </div>
+              <ol class="plat-steps mono">
+                <li>Tap <strong>Share</strong> (square with arrow) at bottom.</li>
+                <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+                <li>Tap <strong>Add</strong> to launch TrueLedger standalone.</li>
+              </ol>
+            </div>
+
+            <div class="plat-card" data-plat="android">
+              <div class="plat-head">
+                <span class="plat-icon">🤖</span>
+                <span class="mono plat-title">Android (Chrome)</span>
+              </div>
+              <ol class="plat-steps mono">
+                <li>Tap the <strong>Install App Now</strong> button above.</li>
+                <li>Or tap menu (⋮) &rarr; <strong>Install app</strong>.</li>
+                <li>Installs as an instant offline WebAPK.</li>
+              </ol>
+            </div>
+
+            <div class="plat-card" data-plat="desktop">
+              <div class="plat-head">
+                <span class="plat-icon">💻</span>
+                <span class="mono plat-title">Desktop (Mac &amp; PC)</span>
+              </div>
+              <ol class="plat-steps mono">
+                <li>Click <strong>Install App Now</strong> or the URL bar icon.</li>
+                <li>Click <strong>Install</strong> to add to your applications.</li>
+                <li>Runs in a borderless window with keyboard shortcuts.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QR Code / Phone Transfer Card -->
+      <div class="panel qr-card">
+        <h3 class="sub-title">Scan for Mobile</h3>
+        <p class="mono qr-sub">On desktop? Point your phone camera to open and install TrueLedger instantly.</p>
+        <div class="qr-frame">
+          <img src="assets/qr-app.svg" alt="Scan QR Code to install TrueLedger on mobile" class="qr-svg" width="168" height="168">
+        </div>
+        <p class="mono qr-url">expense-tracker-beta-ten-86.vercel.app</p>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ END ============ -->
   <section class="end" id="end" aria-live="polite">
     <div class="drift-word" data-drift="0.18" aria-hidden="true">ANSWER</div>
@@ -366,6 +455,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 
 <footer class="foot mono">
   <span>TrueLedger</span>
+  <a href="#download" class="foot-dl-link">↓ Download / Install App</a>
   <span>Your data stays in this browser.</span>
 </footer>
 
@@ -473,6 +563,14 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
       </div>
     </div>
 
+    <div class="data-tools" id="pwa-tools">
+      <p class="mono">TrueLedger App</p>
+      <p class="mono field-hint" id="pwa-status-hint">Install standalone app for instant offline launch.</p>
+      <div class="tool-row">
+        <button type="button" class="ghost-btn" id="settings-download-btn">↓ Install App on this device</button>
+      </div>
+    </div>
+
     <footer class="modal-foot">
       <button type="button" class="ghost-btn" data-close>Close</button>
       <button type="submit" class="solid-btn">Save settings</button>
@@ -552,6 +650,31 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
       <button type="submit" class="solid-btn danger" id="confirm-yes" value="yes">Delete</button>
     </footer>
   </form>
+</dialog>
+
+<dialog class="modal" id="download-modal" aria-labelledby="download-modal-title">
+  <div class="modal-inner">
+    <header class="modal-head">
+      <h3 id="download-modal-title">Install TrueLedger</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <div class="download-modal-body">
+      <div class="download-modal-id">
+        <img src="assets/icons/icon-192.png" alt="TrueLedger" class="app-icon-img" width="56" height="56">
+        <div>
+          <h4 class="app-name">TrueLedger</h4>
+          <p class="mono field-hint">Offline Vault • Standalone PWA • Zero Stores</p>
+        </div>
+      </div>
+      <div class="dl-modal-instruction mono" id="dl-modal-instruction">
+        <!-- populated dynamically with current OS instructions -->
+      </div>
+      <div class="dl-modal-actions">
+        <button type="button" class="solid-btn" id="modal-pwa-install-btn">Install App Now</button>
+        <button type="button" class="ghost-btn" data-close>Got it</button>
+      </div>
+    </div>
+  </div>
 </dialog>
 
 <dialog class="modal palette" id="palette" aria-label="Jump to a section or run a command">

@@ -728,6 +728,89 @@
     applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light', true);
   }
 
+  /* ============ PWA INSTALL & DOWNLOAD ============ */
+  var deferredInstallPrompt = null;
+  function isStandalone() {
+    return window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  }
+
+  function detectOS() {
+    var ua = (navigator.userAgent || '').toLowerCase();
+    if (/iphone|ipad|ipod/.test(ua)) return 'ios';
+    if (/android/.test(ua)) return 'android';
+    if (/macintosh|mac os x/.test(ua)) return 'mac';
+    if (/windows/.test(ua)) return 'windows';
+    return 'desktop';
+  }
+
+  function updateInstallUI(installed) {
+    var btn = $('main-download-btn'), txt = $('main-download-text'), stat = $('dl-status-text');
+    var barBtn = $('bar-download-btn'), setBtn = $('settings-download-btn');
+    if (installed || isStandalone()) {
+      if (btn) btn.disabled = true;
+      if (txt) txt.textContent = 'App Installed ✓';
+      if (stat) stat.textContent = 'TrueLedger is running in standalone vault mode';
+      if (barBtn) barBtn.innerHTML = '<span class="dl-arrow">✓</span> Installed';
+      if (setBtn) setBtn.textContent = '✓ App already installed';
+    } else if (deferredInstallPrompt) {
+      if (btn) btn.disabled = false;
+      if (txt) txt.textContent = 'Install App Now';
+      if (stat) stat.textContent = '1-click instant install ready on this device';
+    }
+  }
+
+  function openDownloadModal() {
+    var os = detectOS();
+    var inst = $('dl-modal-instruction');
+    var pwaBtn = $('modal-pwa-install-btn');
+    if (isStandalone()) {
+      inst.innerHTML = '<p><strong>✓ TrueLedger is already installed</strong> and running in standalone app mode on this device.</p>';
+      pwaBtn.hidden = true;
+    } else if (os === 'ios') {
+      inst.innerHTML = '<p><strong>How to install on iPhone &amp; iPad:</strong></p>' +
+        '<ol>' +
+        '<li>Tap the <strong>Share button</strong> (square with an arrow pointing up) at the bottom of Safari.</li>' +
+        '<li>Scroll down in the action sheet and tap <strong>Add to Home Screen</strong>.</li>' +
+        '<li>Tap <strong>Add</strong> in the top-right corner. TrueLedger will appear on your home screen!</li>' +
+        '</ol>';
+      pwaBtn.hidden = true;
+    } else if (deferredInstallPrompt) {
+      inst.innerHTML = '<p><strong>Instant 1-Click Install Ready:</strong></p>' +
+        '<p>Click the button below to add TrueLedger directly to your apps for offline access.</p>';
+      pwaBtn.hidden = false;
+      pwaBtn.textContent = 'Install Now';
+    } else {
+      inst.innerHTML = '<p><strong>How to install on this device:</strong></p>' +
+        '<ol>' +
+        '<li>Open your browser menu (Chrome / Edge / Brave).</li>' +
+        '<li>Click <strong>Install TrueLedger</strong> or look for the install icon in your address bar (⊕ / ⊞).</li>' +
+        '<li>Once installed, TrueLedger runs offline without browser bars.</li>' +
+        '</ol>';
+      pwaBtn.hidden = true;
+    }
+    openModal($('download-modal'));
+  }
+
+  function triggerInstall() {
+    if (isStandalone()) {
+      toast('TrueLedger is already installed and running standalone! ✓');
+      return;
+    }
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(function (choice) {
+        if (choice && choice.outcome === 'accepted') {
+          toast('Installing TrueLedger to your device... 🚀');
+          updateInstallUI(true);
+        }
+        deferredInstallPrompt = null;
+      });
+      return;
+    }
+    openDownloadModal();
+  }
+
   /* ============ COMMAND PALETTE ============ */
   var pal = { items: [], idx: 0 };
   function commands() {
@@ -737,11 +820,13 @@
     add('Add entry', 'N', function () { openEntry(); });
     add('New goal', '', openGoal);
     add('Add account', '', openAccount);
+    add('Download / Install App', 'App', triggerInstall);
     add('Go to the month', 'Section', function () { jump('month'); });
     add('Go to accounts', 'Section', function () { jump('accounts'); });
     add('Go to goals', 'Section', function () { jump('goals'); });
     add('Go to the ledger', 'Section', function () { jump('ledger'); });
     add('Go to where it went', 'Section', function () { jump('insights'); });
+    add('Go to Get App', 'Section', function () { jump('download'); });
     add('Previous month', '', function () { $('month-prev').click(); });
     add('Next month', '', function () { $('month-next').click(); });
     add(light ? 'Switch to dark theme' : 'Switch to light theme', '', toggleTheme);
@@ -880,6 +965,33 @@
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register('sw.js').catch(function () {});
     }
+
+    // PWA download / install bindings
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      updateInstallUI(false);
+    });
+    window.addEventListener('appinstalled', function () {
+      deferredInstallPrompt = null;
+      updateInstallUI(true);
+      toast('TrueLedger installed to your device! 🎉');
+    });
+    if ($('bar-download-btn')) $('bar-download-btn').addEventListener('click', triggerInstall);
+    if ($('main-download-btn')) $('main-download-btn').addEventListener('click', triggerInstall);
+    if ($('settings-download-btn')) {
+      $('settings-download-btn').addEventListener('click', function () {
+        closeModal($('settings-modal'));
+        triggerInstall();
+      });
+    }
+    if ($('modal-pwa-install-btn')) {
+      $('modal-pwa-install-btn').addEventListener('click', function () {
+        closeModal($('download-modal'));
+        triggerInstall();
+      });
+    }
+    updateInstallUI(isStandalone());
     $('fresh-btn').addEventListener('click', function () {
       confirmDialog('Clear the sample data?', 'Your accounts and entries will be replaced with an empty Bank and Cash account.', 'Start fresh')
         .then(function (yes) { if (yes) { S.startFresh(); toast('Fresh start. Add your first entry.'); } });
