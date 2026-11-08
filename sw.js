@@ -6,6 +6,7 @@ var SHELL = [
   "index.html",
   "css/style.css",
   "css/gate.css",
+  "js/parser.js",
   "js/store.js",
   "js/hero.js",
   "js/cursor.js",

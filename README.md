@@ -18,10 +18,37 @@ Open http://localhost:8080. Deploys as-is to Vercel, Netlify or GitHub Pages.
 | Accounts | Balance per account, switch an account off to leave it out of totals, add / delete. |
 | Goals | Savings goals with a pink progress meter. Add money or take it out; "Reached" when you hit the target. |
 | Ledger | Search, type / account / category / period filters, sort, add / edit / delete (delete has Undo). Spent, Received and Moved (transfer between accounts). Tick "Repeat every month" and rent, subscriptions or salary add themselves; manage them under "Repeating entries". |
-| Where it went | Category breakdown (halftone bars), six-month trend, a day-by-day dot calendar (bigger dot = bigger spend), plain-language notes. |
-| Settings | Name, currency (symbol only), monthly budget, CSV export / import, sample data, erase. |
+| Where it went | Category breakdown (halftone bars), six-month trend, a day-by-day dot calendar (bigger dot = bigger spend), plain-language notes. Top merchants, month-over-month pace/velocity, recurring subscription detector, and unusual spending alerts. |
+| Settings | Name, currency (symbol only), monthly budget, category-level spending limits, CSV export / multi-bank import, AES-256-GCM encrypted vault backup & restore, sample data, erase. |
+| Parser & Review | ⚡ Paste bank SMS & UPI notifications (HDFC, SBI, ICICI, Axis, Kotak, GPay, PhonePe, Paytm, CRED). Dedicated raw events Review Queue, strict UPI Ref deduplication and fuzzy date deduplication. |
 
 Works offline and can be installed to the home screen (service worker + manifest). When you ship changes, bump `CACHE` in `sw.js`.
+
+## Power Features (Adapted from OwnSpend, PennyWise & Cashiro)
+
+1. **Intelligent Message Parser (`js/parser.js`):**
+   - Instant offline parsing of bank SMS and UPI payment notifications.
+   - Extracts amount, debit/credit type, clean merchant name, transaction date, UPI reference / UTR ID, and bank/app source.
+   - Normalized dictionary for popular Indian merchants (Swiggy, Zomato, Uber, Ola, Zepto, Blinkit, Amazon, Netflix, etc.).
+2. **Review Queue Staging:**
+   - Paste raw messages directly or stage incoming alerts in a dedicated review queue.
+   - Review, edit, or accept one-by-one or in bulk before entries hit your ledger.
+3. **Deduplication Engine:**
+   - **Strict match:** Prevents duplicate entries with identical UPI UTR / reference numbers.
+   - **Fuzzy match:** Detects identical amounts within $\pm 2$ days with matching descriptions (e.g. Bank SMS vs GPay notification).
+4. **Auto-Categorization & Machine-Learning Rules:**
+   - Built-in heuristic mappings for food, transport, bills, shopping, health, entertainment, etc.
+   - Remembers user corrections: manually categorizing a merchant teaches TrueLedger to auto-categorize it next time.
+5. **Subscription & Recurring Detection:**
+   - Automatically detects repeating charges across distinct months and offers a 1-click button to convert them into recurring entries.
+6. **Category-Level Budgets & MoM Velocity:**
+   - Set monthly spending caps per category with visual progress meters and over-limit warnings.
+   - Month-over-month delta comparisons, pace projections, and unusual spend alerts (>2.5x category average).
+7. **Client-Side Encrypted Vault Backup (`.vault.json`):**
+   - Military-grade client-side encryption using **AES-256-GCM** and **PBKDF2** (100,000 iterations).
+   - Zero plain-text financial data ever leaves your device.
+8. **Android Build & Background Capture:**
+   - Full native architecture guide for Android background SMS & Notification listener services reusing `js/parser.js` directly on-device. See [Android Build Guide](docs/android-build.md).
 
 Theme: dark by default. **Go light** in the top bar switches to paper-and-ink and remembers your choice. The wallet hero stays dark in both themes. Colours live in the token blocks at the top of `css/style.css`.
 

@@ -122,6 +122,8 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
   </nav>
   <div class="bar-actions">
     <button class="text-btn jump-btn" id="jump-btn" type="button" aria-label="Open command palette">Jump (Ctrl K)</button>
+    <button class="text-btn parse-sms-bar-btn" id="parse-sms-btn" type="button" aria-label="Parse Bank SMS"><span class="flash-icon">⚡</span> Paste SMS</button>
+    <button class="text-btn review-queue-bar-btn" id="review-queue-btn" type="button" aria-label="Review Queue" hidden><span class="rq-dot">●</span> Review <b id="rq-badge-count">0</b></button>
     <button class="text-btn" id="privacy-btn" type="button" aria-pressed="false">Hide numbers</button>
     <button class="download-btn-bar" id="bar-download-btn" type="button" aria-label="Install App"><span class="dl-arrow">↓</span> Install App</button>
     <button class="text-btn" id="sound-btn" type="button" aria-pressed="false" title="Toggle audio effects"><span class="sound-icon">🔇</span> Sound: OFF</button>
@@ -235,12 +237,23 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     <div class="budget" id="budget">
       <div class="budget-top">
         <h3 class="sub-title">Budget</h3>
-        <button class="link-btn" id="budget-edit" type="button">Change limit</button>
+        <div class="budget-actions">
+          <button class="link-btn" id="cat-budgets-open" type="button">Category limits</button>
+          <button class="link-btn" id="budget-edit" type="button">Change total limit</button>
+        </div>
       </div>
       <div class="cells" id="budget-cells" role="img" aria-label="Budget used"></div>
       <div class="budget-meta mono">
         <span id="budget-left"></span>
         <span id="budget-pace"></span>
+      </div>
+
+      <!-- Category Budgets Grid -->
+      <div class="cat-budgets" id="cat-budgets" hidden>
+        <div class="cat-budgets-top">
+          <span class="mono cat-budgets-title">Category Spending Limits</span>
+        </div>
+        <div class="cat-budgets-grid" id="cat-budgets-grid"></div>
       </div>
     </div>
   </section>
@@ -350,6 +363,28 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
         <h3 class="sub-title">Day by day</h3>
         <div class="cal" id="cal" role="img" aria-label="Spending per day"></div>
         <p class="mono cal-note" id="cal-note"></p>
+      </div>
+    </div>
+
+    <div class="insight-grid analytics-grid">
+      <div class="panel">
+        <h3 class="sub-title">Top merchants</h3>
+        <ul class="cats" id="merchant-list"></ul>
+      </div>
+      <div class="panel">
+        <h3 class="sub-title">Pace &amp; Velocity</h3>
+        <div class="mom-card mono" id="mom-card"></div>
+      </div>
+      <div class="panel sub-panel" id="sub-panel" hidden>
+        <div class="sub-head">
+          <h3 class="sub-title">Subscriptions</h3>
+          <span class="mono hint" style="font-size:11px">Recurring candidate</span>
+        </div>
+        <ul class="sub-list" id="sub-list"></ul>
+      </div>
+      <div class="panel alert-panel" id="alert-panel" hidden>
+        <h3 class="sub-title">Unusual Spends</h3>
+        <ul class="alert-list" id="alert-list"></ul>
       </div>
     </div>
 
@@ -475,6 +510,10 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
       <button type="button" role="radio" data-type="transfer" aria-checked="false">Moved</button>
     </div>
 
+    <div class="entry-quick-bar">
+      <button type="button" class="link-btn parse-sms-in-form" id="entry-paste-sms">⚡ Paste SMS to autofill</button>
+    </div>
+
     <label class="amount-field">
       <span class="mono">Amount</span>
       <span class="amount-wrap"><b id="amt-sym">$</b><input id="e-amount" inputmode="decimal" placeholder="0.00" autocomplete="off" required></span>
@@ -493,6 +532,21 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     <div class="row2">
       <label class="field"><span class="mono">Date</span><input id="e-date" type="date" required></label>
       <label class="field"><span class="mono">Note (optional)</span><input id="e-note" type="text" autocomplete="off"></label>
+    </div>
+
+    <div class="row2">
+      <label class="field"><span class="mono">UPI Ref / UTR (optional)</span><input id="e-upiref" type="text" placeholder="e.g. 431029182736" autocomplete="off"></label>
+      <label class="field"><span class="mono">Payment App</span>
+        <select id="e-app">
+          <option value="">Standard</option>
+          <option value="GPay">Google Pay (UPI)</option>
+          <option value="PhonePe">PhonePe (UPI)</option>
+          <option value="Paytm">Paytm (UPI)</option>
+          <option value="CRED">CRED</option>
+          <option value="Bank">Bank SMS / NetBanking</option>
+          <option value="Cash">Cash</option>
+        </select>
+      </label>
     </div>
 
     <label class="check" id="e-repeat-wrap">
@@ -538,6 +592,9 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
       <label class="field"><span class="mono">Currency</span><select id="p-currency"></select></label>
       <label class="field"><span class="mono">Monthly budget</span><input id="p-budget" inputmode="decimal" placeholder="0" autocomplete="off"></label>
     </div>
+    <div style="margin-top:-6px;margin-bottom:8px">
+      <button type="button" class="link-btn" id="settings-cat-budget-btn">Set category-level limits &rarr;</button>
+    </div>
     <p class="field-hint mono">Changing the currency swaps the symbol only. Amounts are not converted.</p>
 
     <div class="data-tools" id="lock-tools">
@@ -560,6 +617,9 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
       <div class="tool-row">
         <button type="button" class="ghost-btn" id="demo-btn">Load sample data</button>
         <button type="button" class="ghost-btn danger" id="wipe-btn">Erase everything</button>
+      </div>
+      <div class="tool-row">
+        <button type="button" class="ghost-btn" id="vault-open-btn">🔒 Encrypted Vault Backup</button>
       </div>
     </div>
 
@@ -677,6 +737,117 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
   </div>
 </dialog>
 
+<dialog class="modal" id="parse-modal" aria-labelledby="parse-modal-title">
+  <div class="modal-inner">
+    <header class="modal-head">
+      <h3 id="parse-modal-title">⚡ Paste Bank SMS / UPI Notification</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <div class="parse-body">
+      <p class="mono repeat-hint">Paste any Indian bank SMS (HDFC, SBI, ICICI, Axis, Kotak, etc.) or UPI alert (GPay, PhonePe, Paytm, CRED). It is parsed instantly offline.</p>
+      <label class="field">
+        <span class="mono">Paste Message / Alert</span>
+        <textarea id="parse-sms-text" rows="4" placeholder="e.g. Rs. 350.00 debited from A/c XX1234 to SWIGGY via UPI Ref 412345678901 on 08-11-2026. Avail Bal Rs 15,200." autocomplete="off" spellcheck="false"></textarea>
+      </label>
+      <div id="parse-preview-box" class="parse-preview" hidden>
+        <div class="parse-preview-head mono">
+          <span>PARSED PREVIEW</span>
+          <span id="parse-dup-badge" class="dup-badge" hidden>⚠️ Duplicate Detected</span>
+        </div>
+        <div class="parse-preview-grid mono">
+          <div><span class="lbl">Type:</span> <strong id="pp-type">-</strong></div>
+          <div><span class="lbl">Amount:</span> <strong id="pp-amount" class="hl-amt">-</strong></div>
+          <div><span class="lbl">Merchant:</span> <strong id="pp-merchant">-</strong></div>
+          <div><span class="lbl">Category:</span> <strong id="pp-cat">-</strong></div>
+          <div><span class="lbl">Date:</span> <strong id="pp-date">-</strong></div>
+          <div><span class="lbl">UPI Ref:</span> <strong id="pp-ref">-</strong></div>
+          <div><span class="lbl">App / Acc:</span> <strong id="pp-acc">-</strong></div>
+        </div>
+      </div>
+      <p class="form-error mono" id="parse-error" role="alert" hidden></p>
+    </div>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="button" class="ghost-btn" id="parse-queue-btn">Add to Review Queue</button>
+      <button type="button" class="solid-btn" id="parse-log-btn">Log to Ledger</button>
+    </footer>
+  </div>
+</dialog>
+
+<dialog class="modal" id="review-modal" aria-labelledby="review-modal-title">
+  <div class="modal-inner">
+    <header class="modal-head">
+      <div class="review-title-wrap">
+        <h3 id="review-modal-title">Review Queue</h3>
+        <span class="mono review-count-pill" id="review-queue-count">0 pending</span>
+      </div>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <p class="mono repeat-hint">Raw SMS &amp; UPI events awaiting your confirmation before hitting the ledger. Confirm or edit each transaction.</p>
+    <div class="review-actions-bar">
+      <button type="button" class="ghost-btn small" id="review-accept-all-btn">✓ Accept All Clean</button>
+      <button type="button" class="ghost-btn small danger" id="review-clear-btn">Clear All</button>
+    </div>
+    <ul class="review-list" id="review-list"></ul>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Close</button>
+    </footer>
+  </div>
+</dialog>
+
+<dialog class="modal small" id="cat-budget-modal" aria-labelledby="cat-budget-title">
+  <form id="cat-budget-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="cat-budget-title">Category Spending Limits</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <p class="mono repeat-hint">Set monthly spending limits for specific categories. Leave blank or 0 for no limit.</p>
+    <div class="cat-budget-inputs" id="cat-budget-inputs"></div>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="submit" class="solid-btn" id="cat-budget-save-btn">Save Budgets</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="modal small" id="vault-modal" aria-labelledby="vault-modal-title">
+  <div class="modal-inner">
+    <header class="modal-head">
+      <h3 id="vault-modal-title">🔐 Encrypted Vault Backup</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <p class="mono repeat-hint">Export or restore your full financial history encrypted client-side using <strong>AES-256-GCM</strong> with <strong>PBKDF2</strong> (100,000 iterations). 100% private &amp; offline.</p>
+    
+    <div class="vault-section">
+      <h4 class="mono vault-subhead">Export Encrypted Backup</h4>
+      <label class="field">
+        <span class="mono">Set Vault Password</span>
+        <input type="password" id="vault-export-pass" placeholder="Strong password (min 6 chars)" autocomplete="new-password">
+      </label>
+      <button type="button" class="solid-btn small" id="vault-export-btn">Download .vault.json</button>
+    </div>
+
+    <div class="vault-divider"><span>OR</span></div>
+
+    <div class="vault-section">
+      <h4 class="mono vault-subhead">Restore from Encrypted Backup</h4>
+      <label class="field">
+        <span class="mono">Select .vault.json file</span>
+        <input type="file" id="vault-import-file" accept=".json,.vault">
+      </label>
+      <label class="field">
+        <span class="mono">Enter Vault Password</span>
+        <input type="password" id="vault-import-pass" placeholder="Password used to encrypt" autocomplete="current-password">
+      </label>
+      <button type="button" class="ghost-btn small" id="vault-import-btn">Decrypt &amp; Restore</button>
+    </div>
+    <p class="form-error mono" id="vault-error" role="alert" hidden></p>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Close</button>
+    </footer>
+  </div>
+</dialog>
+
 <dialog class="modal palette" id="palette" aria-label="Jump to a section or run a command">
   <div class="pal-box">
     <input id="pal-input" type="text" placeholder="Type a command, a section, or words to search the ledger" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list">
@@ -703,6 +874,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-msg"></span><button type="button" class="toast-act" id="toast-act" hidden></button></div>
 
+<script src="js/parser.js"></script>
 <script src="js/store.js"></script>
 <script src="js/hero.js"></script>
 <script src="js/cursor.js"></script>

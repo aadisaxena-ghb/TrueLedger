@@ -21,6 +21,10 @@
   };
 
   /* ---------- small helpers ---------- */
+  var MONTH_MAP = {
+    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+  };
   function uid(p) { return p + '-' + Math.random().toString(36).slice(2, 9); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -126,11 +130,13 @@
     var demo = buildDemo(cur);
     return {
       v: 2,
-      profile: { name: '', currency: cur, budget: demo.budget },
+      profile: { name: '', currency: cur, budget: demo.budget, categoryBudgets: {} },
       accounts: demo.accounts,
       transactions: demo.transactions,
       goals: demo.goals,
       recurring: demo.recurring,
+      reviewQueue: [],
+      categoryRules: {},
       isDemo: true,
       privacy: false
     };
@@ -143,6 +149,10 @@
         var s = JSON.parse(raw);
         if (s && s.v === 2 && s.accounts && s.transactions) {
           s.goals = s.goals || []; s.recurring = s.recurring || [];
+          s.reviewQueue = s.reviewQueue || [];
+          s.categoryRules = s.categoryRules || {};
+          s.profile = s.profile || {};
+          s.profile.categoryBudgets = s.profile.categoryBudgets || {};
           return s;
         }
       }
@@ -227,18 +237,68 @@
 
   function monthStats(ym) {
     var ids = countedIds();
-    var income = 0, spent = 0, byCat = {}, biggest = null, count = 0;
+    var income = 0, spent = 0, byCat = {}, byMerchant = {}, biggest = null, count = 0;
+    var txList = [];
     state.transactions.forEach(function (t) {
       if (ymOf(t.date) !== ym || !ids[t.accountId]) return;
       if (t.type === 'income') { income += t.amount; count++; }
       else if (t.type === 'expense') {
         spent += t.amount; count++;
+        txList.push(t);
         byCat[t.category] = (byCat[t.category] || 0) + t.amount;
+        var merch = (t.merchant || t.description || 'Unknown').trim();
+        byMerchant[merch] = (byMerchant[merch] || 0) + t.amount;
         if (!biggest || t.amount > biggest.amount) biggest = t;
       }
     });
-    var cats = Object.keys(byCat).map(function (k) { return { name: k, total: byCat[k] }; })
-      .sort(function (a, b) { return b.total - a.total; });
+
+    var categoryBudgets = (state.profile && state.profile.categoryBudgets) || {};
+    var cats = Object.keys(byCat).map(function (k) {
+      var budget = categoryBudgets[k] || 0;
+      return {
+        name: k,
+        total: byCat[k],
+        budget: budget,
+        over: budget > 0 && byCat[k] > budget,
+        pct: budget > 0 ? Math.round((byCat[k] / budget) * 100) : null
+      };
+    }).sort(function (a, b) { return b.total - a.total; });
+
+    var topMerchants = Object.keys(byMerchant).map(function (k) {
+      return { name: k, total: byMerchant[k], pct: spent > 0 ? Math.round((byMerchant[k] / spent) * 100) : 0 };
+    }).sort(function (a, b) { return b.total - a.total; }).slice(0, 5);
+
+    // Month-over-month comparison vs previous month
+    var prevYM = shiftYM(ym, -1);
+    var prevSpent = 0;
+    state.transactions.forEach(function (t) {
+      if (ymOf(t.date) === prevYM && ids[t.accountId] && t.type === 'expense') {
+        prevSpent += t.amount;
+      }
+    });
+    var momDiff = prevSpent > 0 ? spent - prevSpent : 0;
+    var momPct = prevSpent > 0 ? Math.round(((spent - prevSpent) / prevSpent) * 100) : null;
+
+    // Unusual spend alerts: any spend >= 2.5x category average
+    var unusualAlerts = [];
+    cats.forEach(function (c) {
+      var catTx = txList.filter(function (t) { return t.category === c.name; });
+      if (catTx.length >= 3) {
+        var avg = c.total / catTx.length;
+        catTx.forEach(function (t) {
+          if (t.amount >= avg * 2.5 && t.amount > 50) {
+            unusualAlerts.push({
+              tx: t,
+              category: c.name,
+              amount: t.amount,
+              avg: Math.round(avg),
+              ratio: (t.amount / avg).toFixed(1)
+            });
+          }
+        });
+      }
+    });
+
     var isNow = ym === currentYM();
     var dim = daysInMonth(ym);
     var dayN = isNow ? new Date().getDate() : dim;
@@ -247,7 +307,12 @@
       ym: ym, income: income, spent: spent, net: income - spent, cats: cats, biggest: biggest,
       count: count, isNow: isNow, daysLeft: dim - dayN, projected: projected,
       perDay: dayN > 0 ? spent / dayN : 0,
-      rate: income > 0 ? (income - spent) / income : null
+      rate: income > 0 ? (income - spent) / income : null,
+      topMerchants: topMerchants,
+      prevSpent: prevSpent,
+      momDiff: momDiff,
+      momPct: momPct,
+      unusualAlerts: unusualAlerts
     };
   }
 
@@ -331,16 +396,257 @@
     return out;
   }
 
+  /* ---------- review queue & rules ---------- */
+  function addToReviewQueue(rawText, parsed) {
+    if (!parsed) {
+      var Parser = (typeof window !== 'undefined' && window.EF && window.EF.Parser) || (typeof root !== 'undefined' && root.EF && root.EF.Parser);
+      if (Parser) {
+        parsed = Parser.parse(rawText, state.categoryRules);
+      } else {
+        return null;
+      }
+    }
+    if (!parsed || parsed.success === false || !(parsed.amount > 0)) return null;
+
+    var ParserMod = (typeof window !== 'undefined' && window.EF && window.EF.Parser) || (typeof root !== 'undefined' && root.EF && root.EF.Parser);
+    var dup = null;
+    if (ParserMod) {
+      dup = ParserMod.checkDuplicate(parsed, state.transactions, state.reviewQueue);
+    }
+
+    var item = {
+      id: uid('rq'),
+      rawText: rawText,
+      parsed: parsed,
+      status: 'pending',
+      isDuplicate: !!(dup && dup.isDuplicate),
+      duplicateReason: dup ? dup.reason : '',
+      createdAt: new Date().toISOString()
+    };
+
+    state.reviewQueue = state.reviewQueue || [];
+    state.reviewQueue.unshift(item);
+    emit();
+    return item;
+  }
+
+  function acceptReviewItem(id, overrides) {
+    state.reviewQueue = state.reviewQueue || [];
+    var idx = -1;
+    for (var i = 0; i < state.reviewQueue.length; i++) {
+      if (state.reviewQueue[i].id === id) { idx = i; break; }
+    }
+    if (idx === -1) return null;
+
+    var item = state.reviewQueue[idx];
+    var p = Object.assign({}, item.parsed, overrides || {});
+
+    var accId = p.accountId;
+    if (!accId && state.accounts.length) {
+      if (p.accountEnding) {
+        var matched = null;
+        state.accounts.forEach(function (a) {
+          if (a.name.indexOf(p.accountEnding) > -1) matched = a;
+        });
+        accId = matched ? matched.id : state.accounts[0].id;
+      } else {
+        accId = state.accounts[0].id;
+      }
+    }
+
+    var tx = {
+      id: uid('t'),
+      date: p.date || today(),
+      type: p.type || 'expense',
+      description: p.description || p.merchant || 'Expense',
+      merchant: p.merchant || p.description,
+      category: p.category || 'Other',
+      accountId: accId,
+      toAccountId: p.toAccountId || null,
+      amount: Math.round(p.amount * 100) / 100,
+      note: p.note || (p.upiRef ? 'UPI Ref: ' + p.upiRef : ''),
+      upiRef: p.upiRef || '',
+      paymentApp: p.app || '',
+      rawText: item.rawText || ''
+    };
+
+    state.transactions.push(tx);
+
+    if (p.merchant && p.category) {
+      learnCategory(p.merchant, p.category);
+    }
+
+    state.reviewQueue.splice(idx, 1);
+    emit();
+    return tx;
+  }
+
+  function acceptAllReviewItems() {
+    var accepted = 0;
+    var pending = (state.reviewQueue || []).filter(function (it) { return it.status === 'pending' && !it.isDuplicate; });
+    pending.forEach(function (it) {
+      if (acceptReviewItem(it.id)) accepted++;
+    });
+    return accepted;
+  }
+
+  function dismissReviewItem(id) {
+    state.reviewQueue = (state.reviewQueue || []).filter(function (it) { return it.id !== id; });
+    emit();
+  }
+
+  function clearReviewQueue() {
+    state.reviewQueue = [];
+    emit();
+  }
+
+  function learnCategory(merchant, category) {
+    if (!merchant || !category) return;
+    state.categoryRules = state.categoryRules || {};
+    state.categoryRules[merchant.toLowerCase().trim()] = category;
+    save();
+  }
+
+  function setCategoryBudget(category, amount) {
+    state.profile = state.profile || {};
+    state.profile.categoryBudgets = state.profile.categoryBudgets || {};
+    if (amount > 0) {
+      state.profile.categoryBudgets[category] = amount;
+    } else {
+      delete state.profile.categoryBudgets[category];
+    }
+    emit();
+  }
+
+  function getCategoryBudgets() {
+    return (state.profile && state.profile.categoryBudgets) || {};
+  }
+
+  /* ---------- subscription detection ---------- */
+  function detectSubscriptions() {
+    var byMerch = {};
+    state.transactions.forEach(function (t) {
+      if (t.type !== 'expense') return;
+      var m = (t.merchant || t.description || '').trim();
+      if (!m || m.length < 2) return;
+      var key = m.toLowerCase();
+      byMerch[key] = byMerch[key] || { name: m, txs: [] };
+      byMerch[key].txs.push(t);
+    });
+
+    var candidates = [];
+    var existingRecurringNames = (state.recurring || []).map(function (r) { return r.description.toLowerCase(); });
+
+    Object.keys(byMerch).forEach(function (k) {
+      var entry = byMerch[k];
+      if (entry.txs.length < 2) return;
+      if (existingRecurringNames.some(function (rn) { return rn.indexOf(k) > -1 || k.indexOf(rn) > -1; })) return;
+
+      var byMonth = {};
+      entry.txs.forEach(function (t) {
+        var ym = ymOf(t.date);
+        byMonth[ym] = byMonth[ym] || [];
+        byMonth[ym].push(t);
+      });
+
+      var months = Object.keys(byMonth).sort();
+      if (months.length >= 2) {
+        var amounts = entry.txs.map(function (t) { return t.amount; }).sort(function (a, b) { return a - b; });
+        var median = amounts[Math.floor(amounts.length / 2)];
+        var consistent = amounts.every(function (a) { return Math.abs(a - median) / median < 0.20; });
+        if (consistent && median > 0) {
+          var latestTx = entry.txs.slice().sort(function (a, b) { return b.date.localeCompare(a.date); })[0];
+          var day = parseInt(latestTx.date.slice(8, 10), 10) || 1;
+          candidates.push({
+            merchant: entry.name,
+            amount: median,
+            category: latestTx.category || 'Bills',
+            monthsCount: months.length,
+            lastDate: latestTx.date,
+            day: Math.min(28, day),
+            accountId: latestTx.accountId
+          });
+        }
+      }
+    });
+
+    return candidates.sort(function (a, b) { return b.monthsCount - a.monthsCount; });
+  }
+
+  /* ---------- encrypted vault backup (AES-256-GCM) ---------- */
+  async function exportEncrypted(password) {
+    if (!password) throw new Error('Password required');
+    var raw = JSON.stringify({ v: 2, state: state, exportedAt: new Date().toISOString() });
+    var enc = new TextEncoder();
+    var cryptoObj = (typeof window !== 'undefined' && window.crypto) || (typeof global !== 'undefined' && global.crypto);
+    if (!cryptoObj || !cryptoObj.subtle) throw new Error('Web Crypto API not available');
+    var salt = cryptoObj.getRandomValues(new Uint8Array(16));
+    var iv = cryptoObj.getRandomValues(new Uint8Array(12));
+    var keyMaterial = await cryptoObj.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    var key = await cryptoObj.subtle.deriveKey(
+      { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt']
+    );
+    var ciphertext = await cryptoObj.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, enc.encode(raw));
+    return JSON.stringify({
+      app: 'TrueLedger',
+      version: 2,
+      cipher: 'AES-256-GCM',
+      iterations: 100000,
+      salt: Array.from(salt),
+      iv: Array.from(iv),
+      data: Array.from(new Uint8Array(ciphertext))
+    }, null, 2);
+  }
+
+  async function importEncrypted(vaultJson, password) {
+    if (!password) throw new Error('Password required');
+    var vault = typeof vaultJson === 'string' ? JSON.parse(vaultJson) : vaultJson;
+    if (!vault || !vault.salt || !vault.iv || !vault.data) throw new Error('Invalid vault file format');
+    var enc = new TextEncoder();
+    var dec = new TextDecoder();
+    var cryptoObj = (typeof window !== 'undefined' && window.crypto) || (typeof global !== 'undefined' && global.crypto);
+    if (!cryptoObj || !cryptoObj.subtle) throw new Error('Web Crypto API not available');
+    var salt = new Uint8Array(vault.salt);
+    var iv = new Uint8Array(vault.iv);
+    var ciphertext = new Uint8Array(vault.data);
+    var keyMaterial = await cryptoObj.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    var key = await cryptoObj.subtle.deriveKey(
+      { name: 'PBKDF2', salt: salt, iterations: vault.iterations || 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+    var decryptedBuffer = await cryptoObj.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, ciphertext);
+    var decryptedJson = dec.decode(decryptedBuffer);
+    var parsed = JSON.parse(decryptedJson);
+    if (parsed && parsed.state && parsed.state.accounts && parsed.state.transactions) {
+      Object.keys(state).forEach(function (k) { delete state[k]; });
+      Object.assign(state, parsed.state);
+      state.isDemo = false;
+      emit();
+      return true;
+    }
+    throw new Error('Corrupted or invalid backup contents');
+  }
+
   /* ---------- CSV ---------- */
   function csvCell(v) {
     v = String(v == null ? '' : v);
     return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
   }
   function toCSV() {
-    var rows = [['Date', 'Type', 'Description', 'Category', 'Account', 'To account', 'Amount', 'Note']];
+    var rows = [['Date', 'Type', 'Description', 'Category', 'Account', 'To account', 'Amount', 'Note', 'UPI Ref', 'App']];
     state.transactions.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).forEach(function (t) {
       var a = accountById(t.accountId), b = t.toAccountId ? accountById(t.toAccountId) : null;
-      rows.push([t.date, t.type, t.description, t.category, a ? a.name : '', b ? b.name : '', t.amount.toFixed(2), t.note || '']);
+      rows.push([
+        t.date, t.type, t.description, t.category, a ? a.name : '', b ? b.name : '',
+        t.amount.toFixed(2), t.note || '', t.upiRef || '', t.paymentApp || ''
+      ]);
     });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
   }
@@ -366,29 +672,87 @@
     return rows;
   }
 
-  // Returns number of rows added. Works with our own export and with the older sample_data.csv layout.
+  // Returns number of rows added. Supports TrueLedger format and multi-bank statements (HDFC, SBI, ICICI, Axis, Kotak, GPay, PhonePe).
   function importCSV(text) {
     var rows = parseCSV(text);
     if (rows.length < 2) return 0;
     var head = rows[0].map(function (h) { return h.trim().toLowerCase(); });
     function col(names) {
-      for (var i = 0; i < names.length; i++) { var k = head.indexOf(names[i]); if (k > -1) return k; }
+      for (var i = 0; i < names.length; i++) {
+        var n = names[i];
+        for (var h = 0; h < head.length; h++) {
+          if (head[h] === n || head[h].indexOf(n) > -1) return h;
+        }
+      }
       return -1;
     }
+
     var c = {
-      date: col(['date']), type: col(['type']), desc: col(['description', 'merchant', 'title']),
-      cat: col(['category']), acc: col(['account']), to: col(['to account']),
-      amt: col(['amount']), note: col(['note', 'notes'])
+      date: col(['txn date', 'transaction date', 'value date', 'posting date', 'date']),
+      type: col(['type', 'cr/dr', 'd/c', 'dr/cr']),
+      desc: col(['narration', 'particulars', 'description', 'merchant', 'remarks', 'details', 'title']),
+      cat: col(['category']),
+      acc: col(['account', 'account name']),
+      to: col(['to account']),
+      amt: col(['amount', 'net amount', 'total amount', 'txn amount']),
+      debit: col(['debit', 'withdrawal', 'dr amount', 'withdrawal amount', 'dr']),
+      credit: col(['credit', 'deposit', 'cr amount', 'deposit amount', 'cr']),
+      note: col(['note', 'notes', 'reference', 'ref no', 'chq/ref no', 'utr', 'cheque no'])
     };
-    if (c.date < 0 || c.amt < 0) return 0;
+
+    var dateCol = c.date > -1 ? c.date : col(['date']);
+    if (dateCol < 0) return 0;
+    if (c.amt < 0 && c.debit < 0 && c.credit < 0) return 0;
+
     var added = 0;
+    var Parser = (typeof window !== 'undefined' && window.EF && window.EF.Parser) || (typeof root !== 'undefined' && root.EF && root.EF.Parser);
+
     for (var r = 1; r < rows.length; r++) {
       var row = rows[r];
-      var amount = Math.abs(parseFloat(String(row[c.amt]).replace(/[^0-9.\-]/g, '')));
-      var date = (row[c.date] || '').trim();
-      if (!amount || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-      var type = (c.type > -1 ? row[c.type] : 'expense').trim().toLowerCase();
-      if (['income', 'expense', 'transfer'].indexOf(type) < 0) type = 'expense';
+      if (!row || row.length < 2) continue;
+
+      var rawDate = (row[dateCol] || '').trim();
+      var date = null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        date = rawDate;
+      } else {
+        var dmy = rawDate.match(/^(\d{1,2})[-/.](\d{1,2}|[A-Za-z]{3})[-/.](\d{2,4})/);
+        if (dmy) {
+          var day = parseInt(dmy[1], 10);
+          var mon = dmy[2];
+          var yr = parseInt(dmy[3], 10);
+          if (yr < 100) yr += 2000;
+          var monNum = MONTH_MAP[mon.toLowerCase().slice(0, 3)] || pad(parseInt(mon, 10) || 1);
+          date = yr + '-' + monNum + '-' + pad(day);
+        }
+      }
+      if (!date) continue;
+
+      var rawDesc = (c.desc > -1 ? row[c.desc] : '') || 'Bank Entry';
+      var amount = 0;
+      var type = 'expense';
+
+      if (c.debit > -1 && row[c.debit] && parseFloat(String(row[c.debit]).replace(/[^0-9.]/g, '')) > 0) {
+        amount = parseFloat(String(row[c.debit]).replace(/[^0-9.]/g, ''));
+        type = 'expense';
+      } else if (c.credit > -1 && row[c.credit] && parseFloat(String(row[c.credit]).replace(/[^0-9.]/g, '')) > 0) {
+        amount = parseFloat(String(row[c.credit]).replace(/[^0-9.]/g, ''));
+        type = 'income';
+      } else if (c.amt > -1 && row[c.amt]) {
+        var strAmt = String(row[c.amt]).trim();
+        var isNeg = strAmt.indexOf('-') > -1 || strAmt.indexOf('(') > -1 || /dr/i.test(strAmt);
+        amount = Math.abs(parseFloat(strAmt.replace(/[^0-9.\-]/g, '')) || 0);
+        if (c.type > -1 && row[c.type]) {
+          var tStr = row[c.type].toLowerCase().trim();
+          type = (tStr === 'cr' || tStr === 'credit' || tStr === 'income') ? 'income' : 'expense';
+        } else {
+          type = isNeg ? 'expense' : 'expense';
+          if (/(?:salary|refund|interest|credit|deposit)/i.test(rawDesc)) type = 'income';
+        }
+      }
+
+      if (!(amount > 0)) continue;
+
       var accName = c.acc > -1 ? (row[c.acc] || '').trim() : '';
       var acc = null;
       state.accounts.forEach(function (a) { if (a.name.toLowerCase() === accName.toLowerCase()) acc = a; });
@@ -397,31 +761,37 @@
         state.accounts.push(acc);
       }
       if (!acc) acc = state.accounts[0];
-      var toAcc = null;
-      if (type === 'transfer' && c.to > -1) {
-        var tn = (row[c.to] || '').trim().toLowerCase();
-        state.accounts.forEach(function (a) { if (a.name.toLowerCase() === tn) toAcc = a; });
+
+      var merchant = rawDesc;
+      var cat = c.cat > -1 ? (row[c.cat] || '').trim() : '';
+      if (Parser) {
+        merchant = Parser.normalizeMerchant(rawDesc);
+        if (!cat) cat = Parser.categorize(merchant, state.categoryRules);
       }
-      if (type === 'transfer' && !toAcc) type = 'expense';
-      var cat = c.cat > -1 ? (row[c.cat] || '').trim() : 'Other';
-      var list = type === 'income' ? INCOME_CATS : EXPENSE_CATS;
-      if (list.indexOf(cat) < 0) {
-        var alias = { Entertainment: 'Fun', Utilities: 'Bills', Investment: 'Investment' };
-        cat = alias[cat] && list.indexOf(alias[cat]) > -1 ? alias[cat] : 'Other';
-      }
+      if (!cat) cat = type === 'income' ? 'Salary' : 'Other';
+
       state.transactions.push({
-        id: uid('t'), date: date, type: type, description: (c.desc > -1 ? row[c.desc] : '') || 'Untitled',
-        category: cat, accountId: acc.id, toAccountId: toAcc ? toAcc.id : null,
-        amount: amount, note: c.note > -1 ? (row[c.note] || '') : ''
+        id: uid('t'),
+        date: date,
+        type: type,
+        description: merchant || rawDesc,
+        merchant: merchant || rawDesc,
+        category: cat,
+        accountId: acc.id,
+        toAccountId: null,
+        amount: Math.round(amount * 100) / 100,
+        note: c.note > -1 ? (row[c.note] || '') : ''
       });
       added++;
     }
+
     if (added) { state.isDemo = false; emit(); }
     return added;
   }
 
-  window.TL = window.EF = window.TL || window.EF || {};
-  window.TL.Store = window.EF.Store = {
+  var root = typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this);
+  root.TL = root.EF = root.TL || root.EF || {};
+  root.TL.Store = root.EF.Store = {
     state: state, subscribe: subscribe,
     EXPENSE_CATS: EXPENSE_CATS, INCOME_CATS: INCOME_CATS, ACCOUNT_TYPES: ACCOUNT_TYPES, CURRENCIES: CURRENCIES,
     fmt: fmt, symbol: symbol, today: today, currentYM: currentYM, shiftYM: shiftYM, monthLabel: monthLabel,
@@ -429,6 +799,11 @@
     monthStats: monthStats, addTx: addTx, updateTx: updateTx, deleteTx: deleteTx, addAccount: addAccount,
     deleteAccount: deleteAccount, toggleCounted: toggleCounted, setProfile: setProfile, setPrivacy: setPrivacy,
     loadDemo: loadDemo, startFresh: startFresh, restoreTx: restoreTx, addRule: addRule, deleteRule: deleteRule,
-    addGoal: addGoal, deleteGoal: deleteGoal, contributeGoal: contributeGoal, dayTotals: dayTotals, runRecurring: runRecurring, toCSV: toCSV, importCSV: importCSV, emit: emit
+    addGoal: addGoal, deleteGoal: deleteGoal, contributeGoal: contributeGoal, dayTotals: dayTotals, runRecurring: runRecurring,
+    toCSV: toCSV, importCSV: importCSV, emit: emit,
+    addToReviewQueue: addToReviewQueue, acceptReviewItem: acceptReviewItem, acceptAllReviewItems: acceptAllReviewItems,
+    dismissReviewItem: dismissReviewItem, clearReviewQueue: clearReviewQueue, learnCategory: learnCategory,
+    setCategoryBudget: setCategoryBudget, getCategoryBudgets: getCategoryBudgets,
+    detectSubscriptions: detectSubscriptions, exportEncrypted: exportEncrypted, importEncrypted: importEncrypted
   };
 })();

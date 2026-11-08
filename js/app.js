@@ -450,6 +450,416 @@
     renderTrend();
     renderCalendar();
     renderNotes(st);
+    renderTopMerchants(st);
+    renderMom(st);
+    renderSubscriptions();
+    renderUnusualAlerts(st);
+  }
+
+  /* ============ CATEGORY BUDGETS ============ */
+  function renderCategoryBudgets(st) {
+    var host = $('cat-budgets'), grid = $('cat-budgets-grid');
+    if (!host || !grid) return;
+    var budgets = S.getCategoryBudgets();
+    var hasAny = Object.keys(budgets).some(function (k) { return budgets[k] > 0; });
+    if (!hasAny) {
+      host.hidden = true;
+      return;
+    }
+    host.hidden = false;
+    grid.textContent = '';
+    var catMap = {};
+    (st.cats || []).forEach(function (c) { catMap[c.name] = c.total; });
+    Object.keys(budgets).forEach(function (cat) {
+      var limit = budgets[cat];
+      if (!(limit > 0)) return;
+      var spent = catMap[cat] || 0;
+      var over = spent > limit;
+      var pct = Math.min(100, Math.round((spent / limit) * 100));
+      var card = make('div', 'cat-budget-card' + (over ? ' over-limit' : ''));
+      
+      var row = make('div', 'cat-budget-row');
+      row.appendChild(make('span', 'cat-budget-name', cat));
+      var amtSpan = make('span', 'cat-budget-amounts mono');
+      amtSpan.innerHTML = '<span class="spent-val">' + whole(spent) + '</span> / ' + whole(limit) + (over ? ' <b style="color:var(--red)">(+' + whole(spent - limit) + ')</b>' : '');
+      row.appendChild(amtSpan);
+      card.appendChild(row);
+
+      var bar = make('div', 'cat-budget-bar');
+      var fill = make('div', 'cat-budget-fill');
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      card.appendChild(bar);
+
+      clickable(card, function () { goLedger({ type: 'expense', category: cat }); }, 'View ' + cat + ' entries');
+      grid.appendChild(card);
+    });
+  }
+
+  function openCategoryBudgets() {
+    var inputs = $('cat-budget-inputs');
+    if (!inputs) return;
+    inputs.textContent = '';
+    var budgets = S.getCategoryBudgets();
+    S.EXPENSE_CATS.forEach(function (cat) {
+      var lbl = make('label', 'field');
+      lbl.appendChild(make('span', 'mono', cat));
+      var inp = make('input');
+      inp.type = 'text';
+      inp.inputMode = 'decimal';
+      inp.placeholder = 'No limit';
+      inp.dataset.cat = cat;
+      if (budgets[cat] > 0) inp.value = budgets[cat];
+      lbl.appendChild(inp);
+      inputs.appendChild(lbl);
+    });
+    openModal($('cat-budget-modal'));
+  }
+
+  function submitCategoryBudgets(ev) {
+    ev.preventDefault();
+    var inputs = $('cat-budget-inputs').querySelectorAll('input[data-cat]');
+    inputs.forEach(function (inp) {
+      var cat = inp.dataset.cat;
+      var val = parseFloat(inp.value.replace(/,/g, '')) || 0;
+      S.setCategoryBudget(cat, val);
+    });
+    closeModal($('cat-budget-modal'));
+    toast('Category spending limits saved');
+    render();
+  }
+
+  /* ============ ANALYTICS: MERCHANTS, VELOCITY, SUBSCRIPTIONS, ALERTS ============ */
+  function renderTopMerchants(st) {
+    var ul = $('merchant-list');
+    if (!ul) return;
+    ul.textContent = '';
+    var list = st.topMerchants || [];
+    if (!list.length) {
+      ul.appendChild(make('li', 'empty', 'No merchant spends this month.'));
+      return;
+    }
+    var max = list[0].total;
+    list.forEach(function (m, i) {
+      var li = make('li', 'cat' + (i === 0 ? ' top' : ''));
+      var head = make('div', 'cat-head');
+      head.appendChild(make('span', 'cat-name', m.name));
+      head.appendChild(make('span', 'mono cat-pct', m.count + (m.count === 1 ? ' txn' : ' txns')));
+      head.appendChild(make('span', 'cat-amt num money', whole(m.total)));
+      clickable(li, function () { goLedger({ search: m.name }); }, 'Show entries for ' + m.name);
+      var bar = make('div', 'dots');
+      bar.style.setProperty('--w', (m.total / max * 100).toFixed(1) + '%');
+      li.appendChild(head); li.appendChild(bar);
+      ul.appendChild(li);
+    });
+  }
+
+  function renderMom(st) {
+    var card = $('mom-card');
+    if (!card) return;
+    card.textContent = '';
+    var prev = st.prevSpent || 0;
+    var diff = st.momDiff != null ? st.momDiff : (st.spent - prev);
+    var pct = st.momPct != null ? st.momPct : (prev > 0 ? Math.round((diff / prev) * 100) : 0);
+    var isUp = diff > 0;
+
+    var g1 = make('div', 'mom-stat-group');
+    g1.appendChild(make('span', 'mom-stat-label', 'Month-over-Month Velocity'));
+    var val1 = make('span', 'mom-stat-val ' + (diff === 0 ? '' : (isUp ? 'up' : 'down')), (diff > 0 ? '+' : '') + whole(diff));
+    if (prev > 0) {
+      var pill = make('span', 'mom-pill ' + (isUp ? 'up' : 'down'), (isUp ? '▲ +' : '▼ ') + pct + '% vs last mo');
+      val1.appendChild(pill);
+    }
+    g1.appendChild(val1);
+    card.appendChild(g1);
+
+    var g2 = make('div', 'mom-stat-group');
+    g2.appendChild(make('span', 'mom-stat-label', 'Previous Month Total'));
+    g2.appendChild(make('span', 'mom-sub-val', prev > 0 ? whole(prev) + ' spent in ' + S.monthLabel(S.shiftYM(ui.ym, -1), true) : 'No baseline data'));
+    card.appendChild(g2);
+
+    if (st.isNow && st.spent > 0) {
+      var g3 = make('div', 'mom-stat-group');
+      g3.appendChild(make('span', 'mom-stat-label', 'End-of-Month Projection'));
+      g3.appendChild(make('span', 'mom-sub-val', 'At current pace: ' + whole(st.projected) + ' projected'));
+      card.appendChild(g3);
+    }
+  }
+
+  function renderSubscriptions() {
+    var panel = $('sub-panel'), list = $('sub-list');
+    if (!panel || !list) return;
+    var candidates = S.detectSubscriptions();
+    if (!candidates || !candidates.length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    list.textContent = '';
+    candidates.forEach(function (c) {
+      var li = make('li', 'sub-item');
+      var info = make('div', 'sub-info');
+      info.appendChild(make('span', 'sub-title-text', c.merchant));
+      info.appendChild(make('span', 'sub-sub mono', 'Avg ' + whole(c.amount) + ' / mo • ' + c.count + ' months detected (' + c.category + ')'));
+      li.appendChild(info);
+
+      var btn = make('button', 'sub-action-btn mono');
+      btn.type = 'button';
+      if (c.isAlreadyRecurring) {
+        btn.textContent = '✓ Recurring';
+        btn.disabled = true;
+      } else {
+        btn.textContent = '+ Add rule';
+        btn.addEventListener('click', function () {
+          S.addRule({
+            type: 'expense',
+            description: c.merchant,
+            category: c.category,
+            amount: c.amount,
+            day: c.day || 1,
+            accountId: state.accounts[0] ? state.accounts[0].id : '',
+            lastRun: S.currentYM()
+          });
+          toast('Added ' + c.merchant + ' to recurring rules');
+          render();
+        });
+      }
+      li.appendChild(btn);
+      list.appendChild(li);
+    });
+  }
+
+  function renderUnusualAlerts(st) {
+    var panel = $('alert-panel'), list = $('alert-list');
+    if (!panel || !list) return;
+    var alerts = st.unusualAlerts || [];
+    if (!alerts.length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    list.textContent = '';
+    alerts.forEach(function (a) {
+      var li = make('li', 'alert-item');
+      var info = make('div', 'alert-info');
+      info.appendChild(make('span', 'alert-title-text', a.description + ' — ' + whole(a.amount)));
+      info.appendChild(make('span', 'alert-sub mono', a.reason + ' • ' + fmtDate(a.date)));
+      clickable(li, function () { goLedger({ search: a.description }); }, 'Find this entry in ledger');
+      li.appendChild(info);
+      list.appendChild(li);
+    });
+  }
+
+  /* ============ MESSAGE PARSER & REVIEW QUEUE ============ */
+  var currentParsed = null;
+  function openParseModal() {
+    $('parse-sms-text').value = '';
+    $('parse-preview-box').hidden = true;
+    showErr('parse-error');
+    currentParsed = null;
+    openModal($('parse-modal'));
+    setTimeout(function () { $('parse-sms-text').focus(); }, 30);
+  }
+
+  function handleParseInput() {
+    var text = $('parse-sms-text').value.trim();
+    if (!text) {
+      $('parse-preview-box').hidden = true;
+      showErr('parse-error');
+      currentParsed = null;
+      return;
+    }
+    var p = EF.Parser.parse(text);
+    if (!p) {
+      $('parse-preview-box').hidden = true;
+      showErr('parse-error', 'Could not extract transaction. Make sure the message includes an amount (e.g. Rs 250, INR 1200).');
+      currentParsed = null;
+      return;
+    }
+    showErr('parse-error');
+    currentParsed = p;
+    $('parse-preview-box').hidden = false;
+    var isDup = EF.Parser.checkDuplicate(p, state.transactions);
+    var dupBadge = $('parse-dup-badge');
+    if (dupBadge) {
+      dupBadge.hidden = !isDup;
+      if (isDup) dupBadge.textContent = '⚠️ Duplicate: ' + isDup.reason;
+    }
+    $('pp-type').textContent = p.type;
+    $('pp-amount').textContent = S.fmt(p.amount);
+    $('pp-merchant').textContent = p.merchant || 'Unknown';
+    $('pp-cat').textContent = p.category || 'Other';
+    $('pp-date').textContent = p.date || S.today();
+    $('pp-ref').textContent = p.upiRef || 'None';
+    $('pp-acc').textContent = (p.paymentApp || '') + (p.accountNumber ? ' (..' + p.accountNumber + ')' : '') || 'Auto';
+  }
+
+  function logParsedTx(p) {
+    if (!state.accounts.length) {
+      toast('Please create an account first!');
+      return;
+    }
+    var acc = null;
+    if (p.accountNumber) {
+      acc = state.accounts.filter(function (a) { return a.name.indexOf(p.accountNumber) > -1; })[0];
+    }
+    if (!acc) acc = state.accounts[0];
+
+    var tx = {
+      type: p.type || 'expense',
+      amount: p.amount,
+      description: p.merchant || 'Parsed spend',
+      category: p.category || 'Other',
+      date: p.date || S.today(),
+      accountId: acc.id,
+      upiRef: p.upiRef,
+      paymentApp: p.paymentApp,
+      note: 'Auto-parsed from message'
+    };
+    S.addTx(tx);
+    if (p.merchant && p.category && p.type === 'expense') {
+      S.learnCategory(p.merchant, p.category);
+    }
+    toast('Saved. ' + S.fmt(tx.amount) + ' logged to ledger.');
+    render();
+  }
+
+  function renderReviewQueue() {
+    var list = $('review-list'), countEl = $('review-queue-count');
+    if (!list) return;
+    list.textContent = '';
+    var items = state.reviewQueue || [];
+    if (countEl) countEl.textContent = items.length + (items.length === 1 ? ' pending' : ' pending');
+    if (!items.length) {
+      list.appendChild(make('li', 'empty', 'Review queue is empty. Paste an SMS or notification to add entries.'));
+      return;
+    }
+    items.forEach(function (item) {
+      var p = item.parsed;
+      var isDup = EF.Parser.checkDuplicate(p, state.transactions);
+      var li = make('li', 'review-item' + (isDup ? ' is-dup' : ''));
+
+      var head = make('div', 'review-item-head');
+      head.appendChild(make('span', 'mono', 'Received: ' + (item.timestamp ? item.timestamp.slice(0, 10) : 'Today')));
+      if (isDup) {
+        var db = make('span', 'dup-badge', '⚠️ ' + isDup.reason);
+        head.appendChild(db);
+      }
+      li.appendChild(head);
+
+      var rawDiv = make('div', 'review-raw mono', item.raw);
+      li.appendChild(rawDiv);
+
+      var tags = make('div', 'review-tags mono');
+      tags.appendChild(make('span', 'review-tag amt', S.fmt(p.amount)));
+      tags.appendChild(make('span', 'review-tag', p.type));
+      if (p.merchant) tags.appendChild(make('span', 'review-tag', p.merchant));
+      if (p.category) tags.appendChild(make('span', 'review-tag', p.category));
+      if (p.date) tags.appendChild(make('span', 'review-tag', p.date));
+      if (p.upiRef) tags.appendChild(make('span', 'review-tag', 'Ref: ' + p.upiRef));
+      if (p.paymentApp) tags.appendChild(make('span', 'review-tag', p.paymentApp));
+      li.appendChild(tags);
+
+      var acts = make('div', 'review-item-actions');
+      var accBtn = make('button', 'solid-btn small', '✓ Accept');
+      accBtn.type = 'button';
+      accBtn.addEventListener('click', function () {
+        S.acceptReviewItem(item.id);
+        toast('Accepted and logged');
+        renderReviewQueue();
+        render();
+      });
+
+      var editBtn = make('button', 'ghost-btn small', 'Edit in Form');
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', function () {
+        ui._reviewItemId = item.id;
+        closeModal($('review-modal'));
+        var tx = {
+          type: p.type || 'expense',
+          amount: p.amount,
+          description: p.merchant || '',
+          category: p.category || 'Other',
+          date: p.date || S.today(),
+          accountId: state.accounts[0] ? state.accounts[0].id : '',
+          upiRef: p.upiRef,
+          paymentApp: p.paymentApp
+        };
+        openEntry(tx);
+      });
+
+      var disBtn = make('button', 'text-btn small', 'Dismiss');
+      disBtn.type = 'button';
+      disBtn.addEventListener('click', function () {
+        S.dismissReviewItem(item.id);
+        toast('Dismissed');
+        renderReviewQueue();
+        render();
+      });
+
+      acts.appendChild(accBtn);
+      acts.appendChild(editBtn);
+      acts.appendChild(disBtn);
+      li.appendChild(acts);
+
+      list.appendChild(li);
+    });
+  }
+
+  function openReviewModal() {
+    renderReviewQueue();
+    openModal($('review-modal'));
+  }
+
+  /* ============ ENCRYPTED VAULT ============ */
+  function openVaultModal() {
+    $('vault-export-pass').value = '';
+    $('vault-import-pass').value = '';
+    $('vault-import-file').value = '';
+    showErr('vault-error');
+    openModal($('vault-modal'));
+  }
+
+  function handleVaultExport() {
+    var pass = $('vault-export-pass').value;
+    if (!pass || pass.length < 6) {
+      showErr('vault-error', 'Password must be at least 6 characters.');
+      return;
+    }
+    showErr('vault-error');
+    S.exportEncrypted(pass).then(function (vaultJson) {
+      download('trueledger-vault-' + S.today() + '.vault.json', vaultJson);
+      toast('Encrypted backup downloaded! 🔐');
+      closeModal($('vault-modal'));
+    }).catch(function (err) {
+      showErr('vault-error', 'Export failed: ' + (err.message || err));
+    });
+  }
+
+  function handleVaultImport() {
+    var file = $('vault-import-file').files[0];
+    var pass = $('vault-import-pass').value;
+    if (!file) {
+      showErr('vault-error', 'Please choose a .vault.json file.');
+      return;
+    }
+    if (!pass) {
+      showErr('vault-error', 'Enter the vault password.');
+      return;
+    }
+    showErr('vault-error');
+    var reader = new FileReader();
+    reader.onload = function () {
+      S.importEncrypted(String(reader.result), pass).then(function () {
+        toast('Encrypted vault restored successfully! 🎉');
+        closeModal($('vault-modal'));
+        closeModal($('settings-modal'));
+        render();
+      }).catch(function (err) {
+        showErr('vault-error', 'Restore failed: ' + (err.message || 'Incorrect password or invalid file.'));
+      });
+    };
+    reader.readAsText(file);
   }
 
   function renderTrend() {
@@ -605,6 +1015,8 @@
     $('e-desc').value = tx ? tx.description : '';
     $('e-date').value = tx ? tx.date : S.today();
     $('e-note').value = tx ? (tx.note || '') : '';
+    $('e-upiref').value = tx && tx.upiRef ? tx.upiRef : '';
+    $('e-app').value = tx && tx.paymentApp ? tx.paymentApp : '';
     if (tx) {
       $('e-account').value = tx.accountId;
       if (tx.toAccountId) $('e-to').value = tx.toAccountId;
@@ -630,8 +1042,17 @@
     var rec = {
       type: type, amount: Math.round(amount * 100) / 100, description: desc || 'Transfer', date: date,
       category: type === 'transfer' ? 'Other' : $('e-category').value,
-      accountId: accountId, toAccountId: toId, note: $('e-note').value.trim()
+      accountId: accountId, toAccountId: toId, note: $('e-note').value.trim(),
+      upiRef: $('e-upiref').value.trim() || undefined,
+      paymentApp: $('e-app').value || undefined
     };
+    if (type === 'expense' && desc && rec.category) {
+      S.learnCategory(desc, rec.category);
+    }
+    if (ui._reviewItemId) {
+      S.dismissReviewItem(ui._reviewItemId);
+      ui._reviewItemId = null;
+    }
     var repeats = !ui.editingId && $('e-repeat').checked;
     if (repeats) {
       var rule = S.addRule({
@@ -706,6 +1127,15 @@
     renderLedger();
     renderInsights(st);
     renderEnd(st);
+    renderCategoryBudgets(st);
+
+    var rqBtn = $('review-queue-btn'), rqCount = (state.reviewQueue || []).length;
+    if (rqBtn) {
+      rqBtn.hidden = rqCount === 0;
+      rqBtn.classList.toggle('has-items', rqCount > 0);
+      var rqCountEl = $('rq-badge-count');
+      if (rqCountEl) rqCountEl.textContent = rqCount;
+    }
     document.body.classList.toggle('privacy', !!state.privacy);
     var pb = $('privacy-btn');
     pb.textContent = state.privacy ? 'Show numbers' : 'Hide numbers';
@@ -814,11 +1244,72 @@
 
   /* ============ COMMAND PALETTE ============ */
   var pal = { items: [], idx: 0 };
+
+  function parseNaturalQuery(q) {
+    if (!q) return null;
+    var norm = q.toLowerCase().trim();
+    var isLastMonth = /last\s+month|prev(?:ious)?\s+month/i.test(norm);
+    var isThisMonth = /this\s+month|current\s+month/i.test(norm);
+    var targetYM = isLastMonth ? S.shiftYM(S.currentYM(), -1) : (isThisMonth ? S.currentYM() : null);
+
+    var matchedCat = null;
+    S.EXPENSE_CATS.concat(S.INCOME_CATS).forEach(function (cat) {
+      var catWords = cat.toLowerCase().split(/[\s&/]+/);
+      if (catWords.some(function (w) { return w.length > 3 && norm.indexOf(w) > -1; })) {
+        matchedCat = cat;
+      }
+    });
+
+    if (matchedCat && targetYM) {
+      return {
+        label: 'Show ' + matchedCat + ' (' + S.monthLabel(targetYM) + ')',
+        hint: 'Smart Query',
+        fn: function () {
+          ui.ym = targetYM;
+          goLedger({ category: matchedCat });
+        }
+      };
+    }
+    if (matchedCat) {
+      return {
+        label: 'Filter ledger for ' + matchedCat,
+        hint: 'Smart Category',
+        fn: function () { goLedger({ category: matchedCat }); }
+      };
+    }
+
+    var amtMatch = norm.match(/(?:over|above|more than|>)\s*(\d+)/i);
+    if (amtMatch) {
+      var minAmt = parseFloat(amtMatch[1]);
+      return {
+        label: 'Show transactions over ' + S.fmt(minAmt),
+        hint: 'Smart Filter',
+        fn: function () {
+          goLedger({ search: '' });
+          ui.limit = 100;
+          renderLedger();
+          var ul = $('tx-list');
+          var lis = ul.querySelectorAll('.tx');
+          lis.forEach(function (li) {
+            var valEl = li.querySelector('.tx-amt');
+            var val = valEl ? parseFloat(valEl.textContent.replace(/[^0-9.-]/g, '')) : 0;
+            if (val < minAmt) li.style.display = 'none';
+          });
+        }
+      };
+    }
+    return null;
+  }
+
   function commands() {
     var c = [];
     function add(label, hint, fn) { c.push({ label: label, hint: hint || '', fn: fn }); }
     var light = document.documentElement.getAttribute('data-theme') === 'light';
     add('Add entry', 'N', function () { openEntry(); });
+    add('⚡ Paste Bank SMS / UPI alert', 'Parser', openParseModal);
+    add('Review Queue (' + (state.reviewQueue || []).length + ' pending)', 'Queue', openReviewModal);
+    add('Category spending limits', 'Budget', openCategoryBudgets);
+    add('🔐 Encrypted Vault Backup', 'Security', openVaultModal);
     add('New goal', '', openGoal);
     add('Add account', '', openAccount);
     add('Download / Install App', 'App', triggerInstall);
@@ -856,7 +1347,12 @@
       var l = it.label.toLowerCase();
       return toks.every(function (t) { return l.indexOf(t) > -1; });
     }).slice(0, 9);
-    if (q) all.unshift({ label: 'Search the ledger for \u201C' + $('pal-input').value.trim() + '\u201D', hint: 'Ledger', fn: function () { goLedger({ search: $('pal-input').value.trim() }); } });
+    var smart = parseNaturalQuery(q);
+    if (smart) {
+      all.unshift(smart);
+    } else if (q) {
+      all.unshift({ label: 'Search the ledger for \u201C' + $('pal-input').value.trim() + '\u201D', hint: 'Ledger', fn: function () { goLedger({ search: $('pal-input').value.trim() }); } });
+    }
     pal.items = all; pal.idx = 0;
     var ul = $('pal-list');
     ul.textContent = '';
@@ -1083,6 +1579,97 @@
       confirmDialog('Erase everything?', 'All accounts and entries are removed from this browser. Export a CSV first if you want a copy.', 'Erase')
         .then(function (yes) { if (yes) { S.startFresh(); closeModal($('settings-modal')); toast('All data erased'); } });
     });
+
+    // parser modal
+    if ($('parse-sms-btn')) $('parse-sms-btn').addEventListener('click', openParseModal);
+    if ($('parse-sms-text')) $('parse-sms-text').addEventListener('input', handleParseInput);
+    if ($('parse-log-btn')) {
+      $('parse-log-btn').addEventListener('click', function () {
+        if (!currentParsed) return showErr('parse-error', 'Please paste a valid transaction message first.');
+        logParsedTx(currentParsed);
+        closeModal($('parse-modal'));
+      });
+    }
+    if ($('parse-queue-btn')) {
+      $('parse-queue-btn').addEventListener('click', function () {
+        if (!currentParsed) return showErr('parse-error', 'Please paste a valid transaction message first.');
+        S.addToReviewQueue($('parse-sms-text').value.trim(), currentParsed);
+        toast('Added to review queue');
+        closeModal($('parse-modal'));
+        render();
+      });
+    }
+
+    // review queue modal
+    if ($('review-queue-btn')) $('review-queue-btn').addEventListener('click', openReviewModal);
+    if ($('review-accept-all-btn')) {
+      $('review-accept-all-btn').addEventListener('click', function () {
+        var n = S.acceptAllReviewItems();
+        toast(n ? n + ' items accepted into ledger' : 'No clean items to accept');
+        renderReviewQueue();
+        render();
+      });
+    }
+    if ($('review-clear-btn')) {
+      $('review-clear-btn').addEventListener('click', function () {
+        confirmDialog('Clear review queue?', 'All unconfirmed staged items will be removed.', 'Clear queue')
+          .then(function (yes) {
+            if (yes) {
+              S.clearReviewQueue();
+              toast('Review queue cleared');
+              renderReviewQueue();
+              render();
+            }
+          });
+      });
+    }
+
+    // entry form paste autofill
+    if ($('entry-paste-sms')) {
+      $('entry-paste-sms').addEventListener('click', function () {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          navigator.clipboard.readText().then(function (clip) {
+            var p = clip && EF.Parser.parse(clip);
+            if (p) {
+              setEntryType(p.type || 'expense');
+              $('e-amount').value = p.amount;
+              $('e-desc').value = p.merchant || '';
+              if (p.category) $('e-category').value = p.category;
+              if (p.date) $('e-date').value = p.date;
+              if (p.upiRef) $('e-upiref').value = p.upiRef;
+              if (p.paymentApp) $('e-app').value = p.paymentApp;
+              toast('Autofilled from clipboard! ⚡');
+            } else {
+              openParseModal();
+            }
+          }).catch(function () {
+            openParseModal();
+          });
+        } else {
+          openParseModal();
+        }
+      });
+    }
+
+    // category budgets
+    if ($('cat-budgets-open')) $('cat-budgets-open').addEventListener('click', openCategoryBudgets);
+    if ($('settings-cat-budget-btn')) {
+      $('settings-cat-budget-btn').addEventListener('click', function () {
+        closeModal($('settings-modal'));
+        openCategoryBudgets();
+      });
+    }
+    if ($('cat-budget-form')) $('cat-budget-form').addEventListener('submit', submitCategoryBudgets);
+
+    // encrypted vault backup
+    if ($('vault-open-btn')) {
+      $('vault-open-btn').addEventListener('click', function () {
+        closeModal($('settings-modal'));
+        openVaultModal();
+      });
+    }
+    if ($('vault-export-btn')) $('vault-export-btn').addEventListener('click', handleVaultExport);
+    if ($('vault-import-btn')) $('vault-import-btn').addEventListener('click', handleVaultImport);
 
     // keyboard: N = new entry
     document.addEventListener('keydown', function (e) {
