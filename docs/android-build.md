@@ -225,3 +225,4 @@ object ParserBridge {
    - Add `@capacitor-community/sms-listener` or use the custom native receiver above.
 2. **Standalone WebView WebAPK (PWA):**
    - The user can tap **Install App** right from TrueLedger in Chrome to get an instant standalone WebAPK.
+

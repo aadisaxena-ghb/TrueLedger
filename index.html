@@ -598,12 +598,31 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     <p class="field-hint mono">Changing the currency swaps the symbol only. Amounts are not converted.</p>
 
     <div class="data-tools" id="lock-tools">
-      <p class="mono">App lock</p>
+      <p class="mono">Vault Security &amp; AES-256-GCM Encryption</p>
       <p class="mono field-hint" id="lock-status"></p>
       <div class="tool-row">
         <button type="button" class="ghost-btn" id="lock-set">Set PIN</button>
         <button type="button" class="ghost-btn" id="lock-now">Lock now</button>
         <button type="button" class="ghost-btn danger" id="lock-remove">Remove PIN</button>
+      </div>
+      <div class="tool-row" style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+        <label class="mono" style="font-size:11px;color:var(--steel)">Auto-lock when app backgrounded:</label>
+        <select id="lock-autolock-select" style="padding:4px 8px;font-size:11px;background:var(--bg);color:var(--bone);border:1px solid var(--line);">
+          <option value="0">Never</option>
+          <option value="1">1 minute</option>
+          <option value="3" selected>3 minutes (Recommended)</option>
+          <option value="5">5 minutes</option>
+          <option value="15">15 minutes</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="data-tools" id="cloud-sync-tools">
+      <p class="mono">Supabase Account &amp; Zero-Knowledge Sync</p>
+      <p class="mono field-hint" id="cloud-sync-hint">Sign in once. Cloud backups are encrypted client-side with your PIN before uploading.</p>
+      <div class="tool-row">
+        <button type="button" class="ghost-btn" id="cloud-auth-btn">Sign in / Connect Account</button>
+        <button type="button" class="ghost-btn" id="cloud-sync-now-btn" hidden>☁️ Sync Vault to Cloud</button>
       </div>
     </div>
 
@@ -848,6 +867,30 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
   </div>
 </dialog>
 
+<dialog class="modal small" id="cloud-auth-modal" aria-labelledby="cloud-auth-title">
+  <form id="cloud-auth-form" method="dialog" novalidate>
+    <header class="modal-head">
+      <h3 id="cloud-auth-title">Account Sign-in (Once)</h3>
+      <button type="button" class="x" data-close aria-label="Close">&times;</button>
+    </header>
+    <p class="mono repeat-hint">Sign in once to activate cloud sync and account recovery. You won't have to enter your password again — just use your PIN to open the vault.</p>
+    <label class="field">
+      <span class="mono">Email Address</span>
+      <input type="email" id="ca-email" placeholder="you@domain.com" autocomplete="email" required>
+    </label>
+    <label class="field">
+      <span class="mono">Password</span>
+      <input type="password" id="ca-pass" placeholder="Password (min 6 characters)" autocomplete="current-password" required>
+    </label>
+    <p class="form-error mono" id="ca-error" role="alert" hidden></p>
+    <footer class="modal-foot">
+      <button type="button" class="ghost-btn" data-close>Cancel</button>
+      <button type="button" class="ghost-btn" id="ca-signup-btn">Create Account</button>
+      <button type="submit" class="solid-btn" id="ca-login-btn">Sign In</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog class="modal palette" id="palette" aria-label="Jump to a section or run a command">
   <div class="pal-box">
     <input id="pal-input" type="text" placeholder="Type a command, a section, or words to search the ledger" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list">
@@ -874,6 +917,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-msg"></span><button type="button" class="toast-act" id="toast-act" hidden></button></div>
 
+<script src="js/security.js"></script>
 <script src="js/parser.js"></script>
 <script src="js/store.js"></script>
 <script src="js/hero.js"></script>

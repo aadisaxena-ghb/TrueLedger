@@ -144,6 +144,11 @@
 
   function load() {
     try {
+      var Sec = (typeof window !== 'undefined' && window.EF && window.EF.Security) || (typeof root !== 'undefined' && root.EF && root.EF.Security);
+      if (Sec && Sec.hasVault()) {
+        // Encrypted vault exists on device. The ledger is locked until decrypted with PIN.
+        return freshState();
+      }
       var raw = localStorage.getItem(KEY) || localStorage.getItem('expenseflow.v2');
       if (raw) {
         var s = JSON.parse(raw);
@@ -162,10 +167,25 @@
 
   var listeners = [];
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    try {
+      var Sec = (typeof window !== 'undefined' && window.EF && window.EF.Security) || (typeof root !== 'undefined' && root.EF && root.EF.Security);
+      if (Sec && Sec.isUnlocked()) {
+        Sec.saveEncryptedState(state);
+      } else if (!Sec || !Sec.hasVault()) {
+        localStorage.setItem(KEY, JSON.stringify(state));
+      }
+    } catch (e) {}
   }
   function emit() { save(); listeners.forEach(function (fn) { fn(); }); }
   function subscribe(fn) { listeners.push(fn); }
+
+  function restoreDecryptedState(decrypted) {
+    if (!decrypted || !decrypted.accounts || !decrypted.transactions) return;
+    Object.keys(state).forEach(function (k) { delete state[k]; });
+    Object.assign(state, decrypted);
+    state.isDemo = false;
+    emit();
+  }
 
   state = load();
 
@@ -804,6 +824,7 @@
     addToReviewQueue: addToReviewQueue, acceptReviewItem: acceptReviewItem, acceptAllReviewItems: acceptAllReviewItems,
     dismissReviewItem: dismissReviewItem, clearReviewQueue: clearReviewQueue, learnCategory: learnCategory,
     setCategoryBudget: setCategoryBudget, getCategoryBudgets: getCategoryBudgets,
-    detectSubscriptions: detectSubscriptions, exportEncrypted: exportEncrypted, importEncrypted: importEncrypted
+    detectSubscriptions: detectSubscriptions, exportEncrypted: exportEncrypted, importEncrypted: importEncrypted,
+    restoreDecryptedState: restoreDecryptedState
   };
 })();

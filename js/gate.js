@@ -51,15 +51,44 @@
   function bestAlg() { return hasSubtle() ? 'sha256' : 'fnv'; }
   function emit(name, detail) { document.dispatchEvent(new CustomEvent(name, { detail: detail })); }
 
+  /* ---------- lock existence check ---------- */
+  function hasAnyLock() {
+    var Sec = window.EF && window.EF.Security;
+    return !!(getLock() || (Sec && Sec.hasVault()));
+  }
+
   /* ---------- attempts ---------- */
-  function lockoutLeft() { var u = 0; try { u = +sessionStorage.getItem('ef-until') || 0; } catch (e) {} return Math.max(0, u - Date.now()); }
+  function lockoutLeft() {
+    var Sec = window.EF && window.EF.Security;
+    if (Sec && Sec.getLockoutInfo) {
+      var info = Sec.getLockoutInfo();
+      if (info.isHardLockout) return 86400000;
+      return info.remainingSeconds * 1000;
+    }
+    var u = 0; try { u = +sessionStorage.getItem('ef-until') || 0; } catch (e) {} return Math.max(0, u - Date.now());
+  }
   function bumpAttempts() {
+    var Sec = window.EF && window.EF.Security;
+    if (Sec && Sec.recordFailedAttempt) {
+      return Sec.recordFailedAttempt().failedAttempts;
+    }
     var n = 0; try { n = (+sessionStorage.getItem('ef-tries') || 0) + 1; sessionStorage.setItem('ef-tries', String(n)); if (n >= 5) { sessionStorage.setItem('ef-until', String(Date.now() + 30000)); sessionStorage.setItem('ef-tries', '0'); } } catch (e) {}
     return n;
   }
-  function resetAttempts() { try { sessionStorage.removeItem('ef-tries'); sessionStorage.removeItem('ef-until'); } catch (e) {} }
+  function resetAttempts() {
+    var Sec = window.EF && window.EF.Security;
+    if (Sec && Sec.resetFailedAttempts) Sec.resetFailedAttempts();
+    try { sessionStorage.removeItem('ef-tries'); sessionStorage.removeItem('ef-until'); } catch (e) {}
+  }
   function tickLockout() {
     clearInterval(lockTimer);
+    var Sec = window.EF && window.EF.Security;
+    var info = Sec && Sec.getLockoutInfo ? Sec.getLockoutInfo() : null;
+    if (info && info.isHardLockout) {
+      submit.disabled = true;
+      say('Maximum PIN attempts reached. Re-authenticate with your account.', false);
+      return;
+    }
     var left = lockoutLeft();
     if (!left) { submit.disabled = false; return; }
     submit.disabled = true;
@@ -87,25 +116,30 @@
 
   function setMode(m) {
     mode = m; lockRec = getLock();
+    var Sec = window.EF && window.EF.Security;
+    var auth = Sec && Sec.getAuthSession ? Sec.getAuthSession() : null;
     var name = '';
     try { name = (EF.Store && EF.Store.state.profile.name) || ''; } catch (e) {}
-    if (m === 'unlock' && lockRec) {
-      pinMax = lockRec.len || 4;
-      setTitle('UNLOCK WALLET');
-      sub.textContent = 'Welcome back' + (name ? ', ' + name : '') + '. Enter your passcode to open your accounts and live ledger.';
+    if (m === 'unlock' && hasAnyLock()) {
+      var storedLen = 6;
+      try { storedLen = parseInt(localStorage.getItem('trueledger.pin_len') || (lockRec && lockRec.len) || '6', 10); } catch (e) {}
+      pinMax = (storedLen >= 4 && storedLen <= 6) ? storedLen : 6;
+      setTitle('UNLOCK VAULT');
+      var userGreet = (auth && auth.email) ? (auth.email.split('@')[0]) : name;
+      sub.textContent = 'Welcome back' + (userGreet ? ', ' + userGreet : '') + '. Enter your passcode to decrypt your AES-256-GCM ledger.';
       nameWrap.hidden = true; demoBtn.hidden = true; forgot.hidden = false;
       pinLab.textContent = 'VAULT PASSCODE';
-      submitT.textContent = 'Unlock wallet';
-      fine.textContent = 'Your data never leaves this device.';
-      holder.textContent = name || 'YOUR NAME';
+      submitT.textContent = 'Unlock vault';
+      fine.textContent = 'Military-grade AES-256-GCM encrypted. Your plaintext ledger is never stored.';
+      holder.textContent = (userGreet || 'VAULT HOLDER').toUpperCase();
     } else {
       mode = 'create'; pinMax = 6;
-      setTitle('OPEN YOUR WALLET');
-      sub.textContent = 'Name it and set a passcode. Everything stays on this device. No account, no sign-up.';
+      setTitle('OPEN YOUR VAULT');
+      sub.textContent = 'Name your wallet and set a 4-6 digit PIN. All data is encrypted with Web Crypto AES-256-GCM.';
       nameWrap.hidden = false; demoBtn.hidden = false; forgot.hidden = true;
-      pinLab.textContent = 'CHOOSE A PASSCODE (4 TO 6 DIGITS)';
-      submitT.textContent = 'Create wallet';
-      fine.textContent = 'A passcode locks the screen on this device. It does not encrypt your data.';
+      pinLab.textContent = 'CHOOSE A PIN (4 TO 6 DIGITS)';
+      submitT.textContent = 'Create encrypted vault';
+      fine.textContent = 'Derives an AES-256-GCM key with PBKDF2 (100,000 iterations). Plaintext is never stored.';
       holder.textContent = (nameIn.value.trim() || 'YOUR NAME');
     }
     pinIn.maxLength = pinMax; pinIn.value = '';
@@ -309,32 +343,75 @@
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
-    if (busy || lockoutLeft()) return;
+    if (busy) return;
+    var Sec = window.EF && window.EF.Security;
+    if (Sec && Sec.getLockoutInfo) {
+      var lockInfo = Sec.getLockoutInfo();
+      if (lockInfo.isHardLockout) {
+        fail('Maximum PIN attempts reached. Re-authenticate with your account.');
+        return;
+      }
+      if (lockInfo.isLockedOut) {
+        fail('Too many tries. Try again in ' + lockInfo.remainingSeconds + 's.');
+        tickLockout();
+        return;
+      }
+    } else if (lockoutLeft()) {
+      return;
+    }
+
     var pin = pinIn.value.replace(/\D/g, '');
     if (mode === 'unlock') {
-      if (!lockRec) { setMode('create'); return; }
-      if (pin.length < pinMax) { fail('Enter all ' + pinMax + ' digits.'); return; }
+      if (!hasAnyLock()) { setMode('create'); return; }
+      if (pin.length < 4) { fail('Enter all ' + pinMax + ' digits.'); return; }
       busy = true; submit.disabled = true;
-      var alg = lockRec.alg || 'sha256';
-      if (alg === 'sha256' && !hasSubtle()) { busy = false; submit.disabled = false; fail('This browser can\u2019t check the passcode on an insecure page. Open the https address.'); return; }
-      hashPin(pin, lockRec.salt, alg).then(function (h) {
-        busy = false; submit.disabled = false;
-        if (h === lockRec.hash) success(false);
-        else {
-          var n = bumpAttempts();
-          if (lockoutLeft()) { fail('Too many tries. Try again in 30s.'); tickLockout(); }
-          else fail('Wrong passcode. ' + (5 - n) + (5 - n === 1 ? ' try' : ' tries') + ' left.');
-        }
-      });
+
+      if (Sec && Sec.hasVault()) {
+        Sec.unlockVault(pin).then(function (decryptedState) {
+          busy = false; submit.disabled = false;
+          if (EF.Store && EF.Store.restoreDecryptedState) {
+            EF.Store.restoreDecryptedState(decryptedState);
+          }
+          success(false);
+        }).catch(function (err) {
+          busy = false; submit.disabled = false;
+          fail(err.message || 'Wrong passcode.');
+          tickLockout();
+        });
+      } else if (lockRec) {
+        var alg = lockRec.alg || 'sha256';
+        if (alg === 'sha256' && !hasSubtle()) { busy = false; submit.disabled = false; fail('This browser can\u2019t check the passcode on an insecure page. Open the https address.'); return; }
+        hashPin(pin, lockRec.salt, alg).then(function (h) {
+          if (h === lockRec.hash) {
+            if (Sec && EF.Store && EF.Store.state) {
+              Sec.setupVault(pin, EF.Store.state).catch(function () {});
+            }
+            busy = false; submit.disabled = false;
+            success(false);
+          } else {
+            busy = false; submit.disabled = false;
+            var n = bumpAttempts();
+            if (lockoutLeft()) { fail('Too many tries. Try again in 30s.'); tickLockout(); }
+            else fail('Wrong passcode. ' + (5 - n) + (5 - n === 1 ? ' try' : ' tries') + ' left.');
+          }
+        });
+      }
     } else {
-      if (pin.length < 4) { fail('Choose 4 to 6 digits.'); return; }
+      if (pin.length < 4 || pin.length > 6) { fail('Choose 4 to 6 digits.'); return; }
       busy = true; submit.disabled = true;
       var salt = randomSalt(), a = bestAlg();
       hashPin(pin, salt, a).then(function (h) {
         saveLock({ salt: salt, hash: h, len: pin.length, alg: a });
         var nm = nameIn.value.trim();
         try { if (nm && EF.Store) EF.Store.setProfile({ name: nm }); } catch (er) {}
-        busy = false; success(false);
+        if (Sec && EF.Store && EF.Store.state) {
+          return Sec.setupVault(pin, EF.Store.state);
+        }
+      }).then(function () {
+        busy = false; submit.disabled = false; success(false);
+      }).catch(function (err) {
+        busy = false; submit.disabled = false;
+        fail(err.message || 'Failed to initialize encrypted vault.');
       });
     }
   });
@@ -348,13 +425,18 @@
       forgotTimer = setTimeout(function () { forgot.classList.remove('sure'); forgot.textContent = 'Forgot your passcode? Erase this wallet'; }, 5000);
       return;
     }
-    try { ['trueledger.v2', 'expenseflow.v2', LOCK_KEY, 'expenseflow.lock', 'tl-onboarded', 'ef-onboarded'].forEach(function (k) { localStorage.removeItem(k); }); sessionStorage.clear(); } catch (e) {}
+    try {
+      ['trueledger.v2', 'expenseflow.v2', 'trueledger.vault', LOCK_KEY, 'expenseflow.lock', 'tl-onboarded', 'ef-onboarded', 'trueledger.security.lockout', 'trueledger.pin_len', 'trueledger.auth_session'].forEach(function (k) { localStorage.removeItem(k); });
+      sessionStorage.clear();
+    } catch (e) {}
     location.reload();
   });
 
   /* ---------- public API ---------- */
   function lock() {
-    if (!getLock()) return;
+    var Sec = window.EF && window.EF.Security;
+    if (!hasAnyLock()) return;
+    if (Sec && Sec.lockVault) Sec.lockVault();
     try { sessionStorage.removeItem('ef-unlocked'); } catch (e) {}
     root.classList.add('gate-lock');
     window.scrollTo(0, 0);
@@ -367,15 +449,46 @@
   var pmMode = 'set';
 
   function refreshLockUI() {
-    var has = !!getLock();
-    $('lock-status').textContent = has
-      ? 'PIN lock is on. It locks the screen on this device. Your data is not encrypted.'
-      : 'No PIN set. Add one to lock this wallet when you walk away.';
+    var Sec = window.EF && window.EF.Security;
+    var has = hasAnyLock();
+    var hasV = Sec && Sec.hasVault();
+    var auth = Sec && Sec.getAuthSession ? Sec.getAuthSession() : null;
+
+    var statusText = '';
+    if (hasV) {
+      statusText = 'Vault is encrypted with AES-256-GCM. Your cached ledger is 100% ciphertext without your PIN.';
+    } else if (has) {
+      statusText = 'PIN lock is active. Data is not yet encrypted. Update PIN to enable AES-256-GCM.';
+    } else {
+      statusText = 'No PIN set. Add a 4-6 digit PIN to encrypt your local data with Web Crypto PBKDF2 + AES-GCM.';
+    }
+    if (auth && auth.email) {
+      statusText += ' [One-time sign-in active: ' + auth.email + ']';
+    }
+    $('lock-status').textContent = statusText;
     $('lock-set').textContent = has ? 'Change PIN' : 'Set PIN';
     $('lock-now').hidden = !has; $('lock-remove').hidden = !has;
+
+    var autoSelect = $('lock-autolock-select');
+    if (autoSelect && Sec && Sec.getAutoLockMinutes) {
+      autoSelect.value = String(Sec.getAutoLockMinutes());
+    }
   }
+
+  var autoSelect = $('lock-autolock-select');
+  if (autoSelect) {
+    autoSelect.addEventListener('change', function () {
+      var Sec = window.EF && window.EF.Security;
+      if (Sec && Sec.setAutoLockMinutes) {
+        var m = parseInt(autoSelect.value, 10);
+        Sec.setAutoLockMinutes(m);
+        emit('ef:toast', m === 0 ? 'Auto-lock disabled' : 'Auto-lock set to ' + m + 'm');
+      }
+    });
+  }
+
   function openPinModal(m) {
-    pmMode = m; var has = !!getLock();
+    pmMode = m; var has = hasAnyLock();
     $('pin-title').textContent = m === 'remove' ? 'Remove PIN' : (has ? 'Change PIN' : 'Set PIN');
     $('pm-cur-wrap').hidden = !has; $('pm-new-wrap').hidden = m === 'remove'; $('pm-rep-wrap').hidden = m === 'remove';
     $('pm-save').textContent = m === 'remove' ? 'Remove PIN' : 'Save PIN';
@@ -389,22 +502,68 @@
 
   pinForm.addEventListener('submit', function (e) {
     e.preventDefault();
+    var Sec = window.EF && window.EF.Security;
     var rec = getLock(), cur = $('pm-cur').value.replace(/\D/g, ''), nw = $('pm-new').value.replace(/\D/g, ''), rp = $('pm-rep').value.replace(/\D/g, '');
     function finish() {
-      if (pmMode === 'remove') { try { localStorage.removeItem(LOCK_KEY); } catch (er) {} emit('ef:toast', 'PIN removed'); pinModal.close(); refreshLockUI(); return; }
-      if (nw.length < 4) return pmError('Choose 4 to 6 digits.');
+      if (pmMode === 'remove') {
+        try {
+          localStorage.removeItem(LOCK_KEY);
+          localStorage.removeItem('trueledger.pin_len');
+          if (Sec) {
+            Sec.lockVault();
+            localStorage.removeItem('trueledger.vault');
+            if (EF.Store && EF.Store.state) localStorage.setItem('trueledger.v2', JSON.stringify(EF.Store.state));
+          }
+        } catch (er) {}
+        emit('ef:toast', 'PIN removed. Ledger unencrypted.');
+        pinModal.close();
+        refreshLockUI();
+        return;
+      }
+      if (nw.length < 4 || nw.length > 6) return pmError('Choose 4 to 6 digits.');
       if (nw !== rp) return pmError('The two PINs don\u2019t match.');
       var salt = randomSalt(), a = bestAlg();
       hashPin(nw, salt, a).then(function (h) {
         saveLock({ salt: salt, hash: h, len: nw.length, alg: a });
+        if (Sec && EF.Store && EF.Store.state) {
+          return Sec.setupVault(nw, EF.Store.state);
+        }
+      }).then(function () {
         try { sessionStorage.setItem('ef-unlocked', '1'); localStorage.setItem('ef-onboarded', '1'); } catch (er) {}
-        emit('ef:toast', 'PIN saved'); pinModal.close(); refreshLockUI();
+        emit('ef:toast', 'PIN saved. Vault encrypted with AES-256-GCM 🔐');
+        pinModal.close();
+        refreshLockUI();
+      }).catch(function (err) {
+        pmError(err.message || 'Error updating PIN.');
       });
     }
-    if (rec) {
+    if (hasAnyLock()) {
       if (cur.length < 4) return pmError('Enter your current PIN.');
-      hashPin(cur, rec.salt, rec.alg || 'sha256').then(function (h) { if (h !== rec.hash) pmError('That current PIN is wrong.'); else finish(); });
-    } else finish();
+      if (Sec && Sec.hasVault()) {
+        var rawVaultStr = localStorage.getItem('trueledger.vault');
+        var rawVault = rawVaultStr ? JSON.parse(rawVaultStr) : null;
+        if (!rawVault) return finish();
+        Sec.deriveKey(cur, rawVault.salt)
+          .then(function (key) {
+            return Sec.decryptPayload(rawVault, key);
+          })
+          .then(function () {
+            finish();
+          })
+          .catch(function () {
+            pmError('Current PIN is incorrect.');
+          });
+      } else if (rec) {
+        hashPin(cur, rec.salt, rec.alg || 'sha256').then(function (h) {
+          if (h !== rec.hash) pmError('That current PIN is wrong.');
+          else finish();
+        });
+      } else {
+        finish();
+      }
+    } else {
+      finish();
+    }
   });
 
   $('lock-set').addEventListener('click', function () { openPinModal('set'); });
@@ -413,11 +572,20 @@
   new MutationObserver(function () { if (settingsModal.open) refreshLockUI(); }).observe(settingsModal, { attributes: true, attributeFilter: ['open'] });
   refreshLockUI();
 
-  window.TL.Gate = window.EF.Gate = { lock: lock, hasPin: function () { return !!getLock(); } };
+  window.TL.Gate = window.EF.Gate = {
+    lock: lock,
+    hasPin: function () { return hasAnyLock(); },
+    unlockWithSession: function () {
+      var Sec = window.EF && window.EF.Security;
+      if (Sec && Sec.resetFailedAttempts) Sec.resetFailedAttempts();
+      tickLockout();
+      say('Account verified. Please enter your PIN.', true);
+    }
+  };
 
   /* ---------- go ---------- */
   if (root.classList.contains('gate-lock')) {
-    try { open(getLock() ? 'unlock' : 'create'); }
+    try { open(hasAnyLock() ? 'unlock' : 'create'); }
     catch (e) { root.classList.remove('gate-lock'); setInert(false); }
   }
 })();

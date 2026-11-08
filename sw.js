@@ -1,11 +1,12 @@
 /* TrueLedger service worker: works offline after the first visit.
    Bump CACHE when you ship changes so everyone gets the new files. */
-var CACHE = 'trueledger-v2';
+var CACHE = 'trueledger-v3';
 var SHELL = [
   "./",
   "index.html",
   "css/style.css",
   "css/gate.css",
+  "js/security.js",
   "js/parser.js",
   "js/store.js",
   "js/hero.js",
