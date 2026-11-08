@@ -775,11 +775,117 @@ body.gold-tycoon .title {
 .qr-svg { display: block; width: 160px; height: 160px; }
 .qr-url { font-size: 11px; color: var(--steel); letter-spacing: 0.04em; word-break: break-all; }
 
-.download-btn-bar { display: inline-flex; align-items: center; gap: 4px; }
-.download-btn-bar .dl-arrow { color: var(--red); font-weight: 700; }
-.nav-dl { color: var(--pink) !important; opacity: 1 !important; }
+.download-btn-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 64, 54, 0.12);
+  border: 1px solid var(--red);
+  color: var(--bone) !important;
+  padding: 6px 12px;
+  border-radius: 3px;
+  font: 500 12px/1 var(--mono);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.download-btn-bar:hover {
+  background: var(--red);
+  color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(239, 64, 54, 0.45);
+}
+.download-btn-bar .dl-arrow {
+  color: var(--red);
+  font-weight: 900;
+  font-size: 13px;
+  transition: transform 0.2s ease;
+}
+.download-btn-bar:hover .dl-arrow {
+  color: #ffffff;
+  transform: translateY(1px);
+}
+.nav-dl { color: var(--pink) !important; opacity: 1 !important; font-weight: 500 !important; }
 .foot-dl-link { color: var(--bone); text-decoration: underline; text-underline-offset: 4px; transition: color 0.15s; }
 .foot-dl-link:hover { color: var(--red); }
+
+/* floating smart install banner */
+.pwa-install-banner {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  max-width: min(540px, calc(100vw - 32px));
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--red);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  padding: 12px 16px;
+  animation: bannerSlideUp 0.4s var(--ease);
+}
+.pwa-install-banner[hidden] {
+  display: none !important;
+}
+@keyframes bannerSlideUp {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.pwa-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.pwa-banner-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.pwa-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pwa-banner-text strong {
+  font-size: 13px;
+  color: var(--bone);
+}
+.pwa-banner-text span {
+  font-size: 11px;
+  color: var(--steel);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pwa-banner-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.banner-close {
+  background: none;
+  border: 0;
+  color: var(--steel);
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.banner-close:hover {
+  color: var(--bone);
+}
+@media (max-width: 760px) {
+  .pwa-install-banner {
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+}
 
 /* download modal */
 .download-modal-body { display: flex; flex-direction: column; gap: 18px; padding: 0 26px 26px; }

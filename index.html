@@ -123,7 +123,7 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
   <div class="bar-actions">
     <button class="text-btn jump-btn" id="jump-btn" type="button" aria-label="Open command palette">Jump (Ctrl K)</button>
     <button class="text-btn" id="privacy-btn" type="button" aria-pressed="false">Hide numbers</button>
-    <button class="text-btn download-btn-bar" id="bar-download-btn" type="button" aria-label="Install App"><span class="dl-arrow">↓</span> App</button>
+    <button class="download-btn-bar" id="bar-download-btn" type="button" aria-label="Install App"><span class="dl-arrow">↓</span> Install App</button>
     <button class="text-btn" id="sound-btn" type="button" aria-pressed="false" title="Toggle audio effects"><span class="sound-icon">🔇</span> Sound: OFF</button>
     <button class="text-btn" id="theme-btn" type="button" aria-pressed="false">Go light</button>
     <button class="text-btn" id="settings-btn" type="button">Settings</button>
@@ -684,6 +684,20 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     <p class="mono pal-hint">Up and down to move. Enter to run. Esc to close.</p>
   </div>
 </dialog>
+
+<aside class="pwa-install-banner" id="pwa-banner" aria-label="Install App" hidden>
+  <div class="pwa-banner-inner">
+    <img src="assets/icons/icon-192.png" width="38" height="38" class="pwa-banner-icon" alt="TrueLedger">
+    <div class="pwa-banner-text">
+      <strong>Install TrueLedger</strong>
+      <span class="mono">Add to home screen for instant offline vault</span>
+    </div>
+    <div class="pwa-banner-btns">
+      <button type="button" class="solid-btn small" id="banner-install-btn">↓ Install</button>
+      <button type="button" class="banner-close" id="banner-close-btn" aria-label="Dismiss banner">&times;</button>
+    </div>
+  </div>
+</aside>
 
 <div id="cursor" popover="manual" aria-hidden="true"></div>
 

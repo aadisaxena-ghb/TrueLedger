@@ -746,13 +746,14 @@
 
   function updateInstallUI(installed) {
     var btn = $('main-download-btn'), txt = $('main-download-text'), stat = $('dl-status-text');
-    var barBtn = $('bar-download-btn'), setBtn = $('settings-download-btn');
+    var barBtn = $('bar-download-btn'), setBtn = $('settings-download-btn'), banner = $('pwa-banner');
     if (installed || isStandalone()) {
       if (btn) btn.disabled = true;
       if (txt) txt.textContent = 'App Installed ✓';
       if (stat) stat.textContent = 'TrueLedger is running in standalone vault mode';
       if (barBtn) barBtn.innerHTML = '<span class="dl-arrow">✓</span> Installed';
       if (setBtn) setBtn.textContent = '✓ App already installed';
+      if (banner) banner.hidden = true;
     } else if (deferredInstallPrompt) {
       if (btn) btn.disabled = false;
       if (txt) txt.textContent = 'Install App Now';
@@ -992,6 +993,25 @@
       });
     }
     updateInstallUI(isStandalone());
+
+    // Smart install banner
+    var banner = $('pwa-banner');
+    if (banner && !isStandalone()) {
+      var closed = false;
+      try { closed = sessionStorage.getItem('tl-banner-closed') === '1'; } catch (e) {}
+      if (!closed) {
+        setTimeout(function () {
+          if (!isStandalone()) banner.hidden = false;
+        }, 1800);
+      }
+    }
+    if ($('banner-install-btn')) $('banner-install-btn').addEventListener('click', triggerInstall);
+    if ($('banner-close-btn')) {
+      $('banner-close-btn').addEventListener('click', function () {
+        if (banner) banner.hidden = true;
+        try { sessionStorage.setItem('tl-banner-closed', '1'); } catch (e) {}
+      });
+    }
     $('fresh-btn').addEventListener('click', function () {
       confirmDialog('Clear the sample data?', 'Your accounts and entries will be replaced with an empty Bank and Cash account.', 'Start fresh')
         .then(function (yes) { if (yes) { S.startFresh(); toast('Fresh start. Add your first entry.'); } });
