@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>TrueLedger — where did it go?</title>
   <meta name="description" content="Track every account, every spend, and see exactly where your money went this month.">
   <meta name="theme-color" content="#0d0e10">
   <script>(function(){try{var d=document.documentElement,q=location.search,L=localStorage,S=sessionStorage;
 var no=/[?&]nointro(?:[=&]|$)/.test(q),force=/[?&]intro(?:[=&]|$)/.test(q),ng=no||/[?&]nogate(?:[=&]|$)/.test(q);
 var rm=matchMedia("(prefers-reduced-motion: reduce)").matches;
-if(!no&&!rm&&(force||S.getItem("ef-intro")!=="1"))d.classList.add("intro-lock");
-var locked=!!(L.getItem("trueledger.lock")||L.getItem("expenseflow.lock"));
+var isMobile=/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)||(window.innerWidth&&window.innerWidth<768);
+if(!no&&!rm&&!isMobile&&(force||S.getItem("ef-intro")!=="1"))d.classList.add("intro-lock");
+var locked=!!(L.getItem("trueledger.lock")||L.getItem("expenseflow.lock")||L.getItem("trueledger.vault"));
 if(!ng&&(locked?S.getItem("ef-unlocked")!=="1":(L.getItem("tl-onboarded")!=="1"&&L.getItem("ef-onboarded")!=="1")))d.classList.add("gate-lock");
 setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-lock")},25000)}catch(e){}})()</script>
   <script>try{var t=localStorage.getItem("trueledger.theme")||localStorage.getItem("expenseflow.theme");document.documentElement.setAttribute("data-theme",t==="light"?"light":"dark")}catch(e){document.documentElement.setAttribute("data-theme","dark")}</script>
@@ -122,13 +126,13 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
   </nav>
   <div class="bar-actions">
     <button class="text-btn jump-btn" id="jump-btn" type="button" aria-label="Open command palette">Jump (Ctrl K)</button>
-    <button class="text-btn parse-sms-bar-btn" id="parse-sms-btn" type="button" aria-label="Parse Bank SMS"><span class="flash-icon">⚡</span> Paste SMS</button>
+    <button class="text-btn parse-sms-bar-btn" id="parse-sms-btn" type="button" aria-label="Parse Bank SMS"><span class="flash-icon">⚡</span> <span class="btn-text">Paste SMS</span></button>
     <button class="text-btn review-queue-bar-btn" id="review-queue-btn" type="button" aria-label="Review Queue" hidden><span class="rq-dot">●</span> Review <b id="rq-badge-count">0</b></button>
-    <button class="text-btn" id="privacy-btn" type="button" aria-pressed="false">Hide numbers</button>
+    <button class="text-btn icon-btn" id="privacy-btn" type="button" aria-pressed="false" title="Toggle privacy"><span class="btn-icon">👁️</span><span class="btn-text">Hide</span></button>
     <button class="download-btn-bar" id="bar-download-btn" type="button" aria-label="Install App"><span class="dl-arrow">↓</span> Install App</button>
     <button class="text-btn" id="sound-btn" type="button" aria-pressed="false" title="Toggle audio effects"><span class="sound-icon">🔇</span> Sound: OFF</button>
     <button class="text-btn" id="theme-btn" type="button" aria-pressed="false">Go light</button>
-    <button class="text-btn" id="settings-btn" type="button">Settings</button>
+    <button class="text-btn icon-btn" id="settings-btn" type="button" aria-label="Settings"><span class="btn-icon">⚙️</span><span class="btn-text">Settings</span></button>
     <button class="add-btn" id="add-btn" type="button">+ Add entry</button>
   </div>
 </header>
@@ -142,6 +146,30 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
     </div>
     <div class="grain" aria-hidden="true"></div>
     <div class="scanline" aria-hidden="true"></div>
+
+    <!-- Mobile-First Quick Dashboard Header (Visible on phones) -->
+    <div class="mobile-dashboard-hero" id="mob-hero">
+      <div class="mob-hero-card">
+        <div class="mob-hero-top">
+          <span class="mono mob-hero-sub">AVAILABLE BALANCE</span>
+          <strong class="mob-hero-val num money" id="mob-balance">0</strong>
+        </div>
+        <div class="mob-hero-row">
+          <div class="mob-hero-stat">
+            <span class="mono mob-stat-k">Spent This Month</span>
+            <span class="mob-stat-v num money red" id="mob-spent">0</span>
+          </div>
+          <div class="mob-hero-stat">
+            <span class="mono mob-stat-k">Income Received</span>
+            <span class="mob-stat-v num money pink" id="mob-income">0</span>
+          </div>
+        </div>
+        <div class="mob-hero-btns">
+          <button type="button" class="mob-btn-add" id="mob-quick-add">+ Add Entry</button>
+          <button type="button" class="mob-btn-sms" id="mob-quick-sms">⚡ Paste SMS</button>
+        </div>
+      </div>
+    </div>
 
     <div class="scene is-on" data-scene="0">
       <p class="mono scene-label">Open the wallet</p>
@@ -495,6 +523,37 @@ setTimeout(function(){d.classList.remove("intro-lock");d.classList.remove("gate-
 </footer>
 
 <button class="fab" id="fab" type="button" aria-label="Add entry">+</button>
+
+<!-- ============ MOBILE NATIVE BOTTOM NAVIGATION BAR ============ -->
+<nav class="mobile-bottom-nav" id="mobile-nav" aria-label="Mobile Navigation">
+  <a href="#month" class="mob-tab on" data-target="month">
+    <svg class="mob-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>
+    </svg>
+    <span class="mob-label">Month</span>
+  </a>
+  <a href="#accounts" class="mob-tab" data-target="accounts">
+    <svg class="mob-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line>
+    </svg>
+    <span class="mob-label">Accounts</span>
+  </a>
+  <button type="button" class="mob-tab mob-tab-action" id="mob-add-btn" aria-label="Add entry">
+    <span class="mob-action-plus">+</span>
+  </button>
+  <a href="#ledger" class="mob-tab" data-target="ledger">
+    <svg class="mob-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>
+    </svg>
+    <span class="mob-label">Ledger</span>
+  </a>
+  <a href="#insights" class="mob-tab" data-target="insights">
+    <svg class="mob-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>
+    </svg>
+    <span class="mob-label">Insights</span>
+  </a>
+</nav>
 
 <!-- ============ DIALOGS ============ -->
 <dialog class="modal" id="entry-modal" aria-labelledby="entry-title">

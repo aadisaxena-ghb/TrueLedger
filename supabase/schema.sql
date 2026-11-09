@@ -1,3 +1,4 @@
+
 -- ============================================================
 -- TRUELEDGER — Supabase Database Schema & Security Policies
 -- Run this in your Supabase Project -> SQL Editor

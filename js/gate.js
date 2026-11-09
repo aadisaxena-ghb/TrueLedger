@@ -327,7 +327,16 @@
     if (mode === 'unlock' && v.length === pinMax && before === v.length) setTimeout(function () { form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true })); }, 140);
   });
   pinIn.addEventListener('focus', updatePin);
-  pinEl.addEventListener('pointerdown', function () { setTimeout(function () { pinIn.focus(); }, 0); });
+  pinEl.addEventListener('pointerdown', function () {
+    setTimeout(function () {
+      pinIn.focus();
+      if (window.innerWidth < 768) {
+        setTimeout(function () {
+          try { pinEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        }, 120);
+      }
+    }, 0);
+  });
   nameIn.addEventListener('input', function () { holder.textContent = nameIn.value.trim() || 'YOUR NAME'; });
   eye.addEventListener('click', function () {
     var on = eye.getAttribute('aria-pressed') !== 'true';

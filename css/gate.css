@@ -184,17 +184,87 @@ html.gate-lock #gate,#gate.show{display:block}
 #gate.leaving .g-flash{animation:gFlash .8s ease-out .35s}
 @keyframes gFlash{0%{opacity:0}18%{opacity:.9}100%{opacity:0}}
 
-/* ---------- small screens ---------- */
+/* ---------- small screens & mobile Android layout ---------- */
 @media (max-width:980px){
-  #gate{overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .g-scene{position:relative;width:100%;height:min(46vh,380px);pointer-events:none}
-  .g-card{width:min(300px,74vw)}
-  .g-word{left:50%;top:22%;font-size:46vw}
-  .g-panel{position:relative;right:auto;top:auto;transform:none;width:auto;margin:0 16px 28px;translate:0 0}
-  .g-par[style*="right:6%"],.g-par[style*="right:14%"]{display:none}
-  .g-par[style*="left:10%;top:62%"]{top:auto!important;bottom:2%;left:5%!important}
-  .g-title{font-size:clamp(48px,15vw,76px)}
-  .g-pin i{height:56px}
+  #gate{
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    display:none;
+    padding:max(16px, env(safe-area-inset-top, 16px)) 16px max(24px, env(safe-area-inset-bottom, 24px));
+    height:100vh;
+    height:100dvh;
+    box-sizing:border-box;
+  }
+  html.gate-lock #gate,#gate.show{
+    display:flex!important;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+  }
+  .g-scene{
+    position:relative;
+    width:100%;
+    height:130px;
+    min-height:130px;
+    margin:8px 0 10px;
+    pointer-events:none;
+    perspective:800px;
+  }
+  .g-cardpar{left:50%!important;top:50%!important}
+  .g-card{width:min(210px,65vw)!important;animation:none!important}
+  .g-card-wrap{opacity:1!important}
+  .g-word{display:none!important}
+  .g-par[style*="left:10%"],.g-par[style*="right:8%"],.g-par[style*="left:34%"],.g-par[style*="right:6%"],.g-par[style*="right:14%"]{
+    display:none!important;
+  }
+  .g-panel{
+    position:relative;
+    right:auto;
+    top:auto;
+    transform:none!important;
+    width:100%;
+    max-width:420px;
+    margin:0 auto 20px;
+    padding:24px 20px;
+    box-sizing:border-box;
+    background:rgba(17,18,21,.95);
+    border:1px solid var(--g-line);
+    border-radius:16px;
+    box-shadow:0 20px 50px rgba(0,0,0,.6);
+    clip-path:none!important;
+    opacity:1!important;
+  }
+  .g-eyebrow{justify-content:center;margin-bottom:12px}
+  .g-title{font-size:clamp(34px,9vw,52px);line-height:0.95;margin:0 0 8px;text-align:center}
+  .g-title .kin-word{display:inline-block}
+  .g-title .kin-ch{opacity:1!important;transform:none!important}
+  .g-sub{font-size:12px;line-height:1.5;text-align:center;margin:0 auto 18px;max-width:34ch}
+  #g-form{gap:14px}
+  .g-pin{
+    display:flex!important;
+    gap:6px!important;
+    justify-content:center!important;
+    width:100%!important;
+    max-width:320px!important;
+    margin:0 auto!important;
+  }
+  .g-pin i{
+    flex:1;
+    max-width:44px!important;
+    height:50px!important;
+    font-size:22px!important;
+    border-radius:8px!important;
+  }
+  .g-eye{align-self:center;padding:4px 10px}
+  .g-btn{padding:14px;font-size:13px;border-radius:8px}
+  .g-forgot{margin:12px auto 0;text-align:center;display:block}
+  .g-fine{text-align:center;margin:10px auto 0;font-size:10.5px}
+}
+@media (max-width:420px){
+  .g-scene{height:110px;min-height:110px}
+  .g-card{width:180px!important}
+  .g-panel{padding:18px 14px}
+  .g-pin i{max-width:40px!important;height:46px!important;font-size:20px!important}
 }
 @media (max-height:640px) and (min-width:981px){
   .g-title{font-size:clamp(44px,8vh,70px)}

@@ -1228,8 +1228,13 @@
     }
     document.body.classList.toggle('privacy', !!state.privacy);
     var pb = $('privacy-btn');
-    pb.textContent = state.privacy ? 'Show numbers' : 'Hide numbers';
-    pb.setAttribute('aria-pressed', String(!!state.privacy));
+    if (pb) {
+      pb.innerHTML = '<span class="btn-icon">' + (state.privacy ? '🔒' : '👁️') + '</span><span class="btn-text">' + (state.privacy ? 'Show numbers' : 'Hide numbers') + '</span>';
+      pb.setAttribute('aria-pressed', String(!!state.privacy));
+    }
+    if ($('mob-balance')) $('mob-balance').textContent = S.fmt(S.totalBalance(), { whole: true });
+    if ($('mob-spent')) $('mob-spent').textContent = S.fmt(st.spent, { whole: true });
+    if ($('mob-income')) $('mob-income').textContent = S.fmt(st.income, { whole: true });
     EF.Hero.setData({
       balance: S.totalBalance(), spent: st.spent, monthName: S.monthLabel(ui.ym).split(' ')[0],
       accounts: state.accounts.filter(function (a) { return a.counted; }).map(function (a) { return { id: a.id, name: a.name, balance: S.balanceOf(a) }; })
@@ -1484,12 +1489,16 @@
   /* ============ NAV HIGHLIGHT ============ */
   function initScrollSpy() {
     if (!('IntersectionObserver' in window)) return;
-    var links = {};
+    var links = {}, mobLinks = {};
     document.querySelectorAll('.nav a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    document.querySelectorAll('.mobile-bottom-nav .mob-tab[data-target]').forEach(function (a) {
+      mobLinks[a.getAttribute('data-target')] = a;
+    });
     var io = new IntersectionObserver(function (es) {
       es.forEach(function (e) {
         if (!e.isIntersecting) return;
         Object.keys(links).forEach(function (k) { links[k].classList.toggle('on', k === e.target.id); });
+        Object.keys(mobLinks).forEach(function (k) { mobLinks[k].classList.toggle('on', k === e.target.id); });
       });
     }, { rootMargin: '-45% 0px -50% 0px' });
     Object.keys(links).forEach(function (id) { var el = $(id); if (el) io.observe(el); });
@@ -1538,6 +1547,21 @@
     $('add-btn').addEventListener('click', function () { openEntry(); });
     $('fab').addEventListener('click', function () { openEntry(); });
     $('end-add').addEventListener('click', function () { openEntry(); });
+    if ($('mob-add-btn')) $('mob-add-btn').addEventListener('click', function () { openEntry(); });
+    if ($('mob-quick-add')) $('mob-quick-add').addEventListener('click', function () { openEntry(); });
+    if ($('mob-quick-sms')) $('mob-quick-sms').addEventListener('click', openParseModal);
+    document.querySelectorAll('.mobile-bottom-nav .mob-tab[data-target]').forEach(function (tab) {
+      tab.addEventListener('click', function (e) {
+        var targetId = tab.getAttribute('data-target');
+        var targetEl = document.getElementById(targetId);
+        if (targetEl) {
+          e.preventDefault();
+          targetEl.scrollIntoView({ behavior: 'smooth' });
+          document.querySelectorAll('.mobile-bottom-nav .mob-tab').forEach(function (t) { t.classList.remove('on'); });
+          tab.classList.add('on');
+        }
+      });
+    });
     $('settings-btn').addEventListener('click', function () { openSettings(); });
     $('budget-edit').addEventListener('click', function () { openSettings(true); });
     $('privacy-btn').addEventListener('click', function () { S.setPrivacy(!state.privacy); });
